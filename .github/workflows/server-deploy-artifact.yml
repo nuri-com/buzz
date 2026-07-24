@@ -1,0 +1,41 @@
+name: Server deploy artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  export:
+    name: Export relay from published image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      IMAGE: ${{ vars.GHCR_IMAGE != '' && vars.GHCR_IMAGE || 'ghcr.io/block/buzz' }}
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Export relay binary
+        run: |
+          docker pull "$IMAGE:main"
+          container=$(docker create "$IMAGE:main")
+          trap 'docker rm -f "$container" >/dev/null' EXIT
+          docker cp "$container:/usr/local/bin/buzz-relay" buzz-relay
+          chmod 0755 buzz-relay
+          file buzz-relay
+          sha256sum buzz-relay > buzz-relay.sha256
+      - name: Upload relay artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: buzz-relay-linux-amd64
+          path: |
+            buzz-relay
+            buzz-relay.sha256
+          if-no-files-found: error
+          retention-days: 14
