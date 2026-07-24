@@ -1,15 +1,22 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
-test("home page loads with Buzz branding", async ({ page }) => {
+test("home page requires a Nuri wallet", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("main").getByRole("img", { name: "Buzz" }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Nuri Buzz" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Create Nuri Wallet" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Use existing wallet" }),
+  ).toBeVisible();
 });
 
 test("home page shows repositories section", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?preview=repositories");
   await expect(page.getByText("Repositories")).toBeVisible();
 });
 

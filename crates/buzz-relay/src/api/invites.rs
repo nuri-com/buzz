@@ -190,7 +190,7 @@ pub async fn accept_policy(
 
 /// Shared prelude: bind the tenant from the Host header and verify the NIP-98
 /// signature + replay for `path`.
-async fn authenticate(
+pub(super) async fn authenticate(
     state: &Arc<AppState>,
     headers: &HeaderMap,
     path: &str,
@@ -371,7 +371,7 @@ pub async fn claim_invite(
 /// important because a pre-membership caller can cheaply create fresh Nostr
 /// keypairs; retaining one immortal entry per key would make the limiter itself
 /// an unbounded-memory denial-of-service vector.
-fn claim_rate_limited(
+pub(super) fn claim_rate_limited(
     state: &AppState,
     community: buzz_core::tenant::CommunityId,
     pubkey: &nostr::PublicKey,

@@ -30,12 +30,36 @@ declare global {
 
 export class Nip07UnavailableError extends Error {
   constructor() {
-    super("A NIP-07 browser extension is required to join in the browser.");
+    super(
+      "Unlock a Nuri Passkey Wallet or install a NIP-07 browser extension.",
+    );
     this.name = "Nip07UnavailableError";
   }
 }
 
 let ephemeralSecretKey: Uint8Array | null = null;
+let nuriSecretKey: Uint8Array | null = null;
+
+function zeroizeSecretKey(secretKey: Uint8Array | null): void {
+  secretKey?.fill(0);
+}
+
+export function unlockNuriSigner(secretKey: Uint8Array): string {
+  const copy = secretKey.slice();
+  const pubkey = getPublicKey(copy);
+  zeroizeSecretKey(nuriSecretKey);
+  nuriSecretKey = copy;
+  return pubkey;
+}
+
+export function lockNuriSigner(): void {
+  zeroizeSecretKey(nuriSecretKey);
+  nuriSecretKey = null;
+}
+
+export function hasNuriSigner(): boolean {
+  return nuriSecretKey !== null;
+}
 
 function getEphemeralSecretKey(): Uint8Array {
   if (!ephemeralSecretKey) {
@@ -46,6 +70,10 @@ function getEphemeralSecretKey(): Uint8Array {
 
 export function hasNip07Provider(): boolean {
   return typeof window !== "undefined" && window.nostr != null;
+}
+
+export function hasBrowserSigner(): boolean {
+  return hasNuriSigner() || hasNip07Provider();
 }
 
 function sameUnsignedEvent(
@@ -77,6 +105,11 @@ export async function signNostrEvent(
     ...template,
     created_at: template.created_at ?? Math.floor(Date.now() / 1000),
   };
+
+  if (nuriSecretKey) {
+    return finalizeEvent(unsigned, nuriSecretKey);
+  }
+
   const provider = typeof window === "undefined" ? undefined : window.nostr;
 
   if (provider) {
@@ -103,4 +136,8 @@ export async function signNostrEvent(
     throw new Error("Failed to create the ephemeral browser identity.");
   }
   return signed;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", lockNuriSigner);
 }
