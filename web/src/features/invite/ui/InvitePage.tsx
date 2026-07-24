@@ -6,7 +6,7 @@ import {
   detectBuzzDownloadPlatform,
   resolveBuzzDownloadUrlForPlatform,
 } from "@/shared/lib/buzz-download";
-import { hasNip07Provider } from "@/shared/lib/nostr-signer";
+import { hasBrowserSigner } from "@/shared/lib/nostr-signer";
 import { relayWsUrl } from "@/shared/lib/relay-url";
 import { Button } from "@/shared/ui/button";
 import * as React from "react";
@@ -118,7 +118,7 @@ export function InvitePage({ code }: { code: string }) {
     }
   };
 
-  const browserSigningAvailable = hasNip07Provider();
+  const browserSigningAvailable = hasBrowserSigner();
   const disabled =
     policy === undefined ||
     opening ||
