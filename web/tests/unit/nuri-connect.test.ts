@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  matchesConnectReturn,
   validApprovalUrl,
   validSessionId,
 } from "../../src/features/nuri-wallet/lib/connect.ts";
@@ -45,4 +46,13 @@ test("accepts only exact Connect session ids and approval URLs", () => {
     ),
     false,
   );
+
+  const pending = {
+    flow: "access" as const,
+    sessionId,
+    returnNonce: "7f7f5a37-605d-4400-96fc-4cd234f8ffcb",
+  };
+  assert.equal(matchesConnectReturn(pending, pending.returnNonce), true);
+  assert.equal(matchesConnectReturn(pending, "attacker-nonce"), false);
+  assert.equal(matchesConnectReturn(null, pending.returnNonce), false);
 });

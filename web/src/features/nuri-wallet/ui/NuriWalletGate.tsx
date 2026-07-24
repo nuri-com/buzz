@@ -8,6 +8,7 @@ import { Button } from "@/shared/ui/button";
 import {
   clearPendingConnectFlow,
   type ConnectFlow,
+  matchesConnectReturn,
   readPendingConnectFlow,
   startConnectFlow,
   waitForConnectApproval,
@@ -75,10 +76,14 @@ export function NuriWalletGate({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const returning =
-      new URLSearchParams(window.location.search).get("nuri_connect") ===
-      "return";
-    if (returning) void complete();
+    const returnNonce = new URLSearchParams(window.location.search).get(
+      "nuri_connect",
+    );
+    if (matchesConnectReturn(readPendingConnectFlow(), returnNonce)) {
+      void complete();
+    } else if (returnNonce) {
+      setError("Connect return does not match this tab. Start again.");
+    }
   }, [complete]);
 
   const start = async (flow: ConnectFlow) => {

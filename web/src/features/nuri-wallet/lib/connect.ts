@@ -8,6 +8,7 @@ export type ConnectFlow = "create" | "access";
 export type ConnectPending = {
   flow: ConnectFlow;
   sessionId: string;
+  returnNonce: string;
 };
 
 export type ConnectApprovedResult = {
@@ -81,8 +82,9 @@ async function connectRequest<T>(path: string, body: unknown): Promise<T> {
 export async function startConnectFlow(
   flow: ConnectFlow,
 ): Promise<ConnectStartResult> {
+  const returnNonce = crypto.randomUUID();
   const callback = new URL(window.location.origin);
-  callback.searchParams.set("nuri_connect", "return");
+  callback.searchParams.set("nuri_connect", returnNonce);
   const result = await connectRequest<ConnectStartResult>(
     endpoint(flow, "start"),
     { return_url: callback.toString() },
@@ -99,6 +101,7 @@ export async function startConnectFlow(
     JSON.stringify({
       flow,
       sessionId: result.session_id,
+      returnNonce,
     } satisfies ConnectPending),
   );
   return result;
@@ -111,7 +114,9 @@ export function readPendingConnectFlow(): ConnectPending | null {
     const value = JSON.parse(raw) as ConnectPending;
     if (
       (value.flow === "create" || value.flow === "access") &&
-      value.sessionId
+      validSessionId(value.sessionId) &&
+      typeof value.returnNonce === "string" &&
+      value.returnNonce.length >= 32
     ) {
       return value;
     }
@@ -124,6 +129,13 @@ export function readPendingConnectFlow(): ConnectPending | null {
 
 export function clearPendingConnectFlow(): void {
   sessionStorage.removeItem(PENDING_KEY);
+}
+
+export function matchesConnectReturn(
+  pending: ConnectPending | null,
+  returnNonce: string | null,
+): boolean {
+  return pending !== null && returnNonce === pending.returnNonce;
 }
 
 export async function waitForConnectApproval(
