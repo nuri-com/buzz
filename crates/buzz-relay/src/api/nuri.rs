@@ -21,17 +21,27 @@ use crate::state::AppState;
 
 use super::{api_error, internal_error};
 
-const CONNECT_RESULT_URL: &str = "https://connect.nuri.com/api/wallet_connect_result";
+const CONNECT_BASE_URL: &str = "https://connect.nuri.com";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Deserialize)]
 struct NuriRegisterRequest {
     session_id: String,
+    flow: ConnectFlow,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum ConnectFlow {
+    Create,
+    Access,
 }
 
 #[derive(Debug, Deserialize)]
 struct ConnectSessionResult {
     status: String,
+    kind: String,
+    session_id: String,
     wallet: Option<ConnectWallet>,
 }
 
@@ -63,11 +73,20 @@ fn valid_session_id(session_id: &str) -> bool {
 
 fn approved_connect_pubkey(
     result: ConnectSessionResult,
+    expected_session_id: &str,
+    flow: ConnectFlow,
 ) -> Result<PublicKey, ConnectApprovalError> {
     match result.status.as_str() {
         "expired" => return Err(ConnectApprovalError::Expired),
         "approved" => {}
         _ => return Err(ConnectApprovalError::NotApproved),
+    }
+    let expected_kind = match flow {
+        ConnectFlow::Create => "create",
+        ConnectFlow::Access => "connect",
+    };
+    if result.session_id != expected_session_id || result.kind != expected_kind {
+        return Err(ConnectApprovalError::Invalid);
     }
     let wallet = result.wallet.ok_or(ConnectApprovalError::Invalid)?;
     PublicKey::from_hex(&wallet.nostr_pubkey_hex).map_err(|_| ConnectApprovalError::Invalid)
@@ -75,9 +94,14 @@ fn approved_connect_pubkey(
 
 async fn fetch_connect_result(
     session_id: &str,
+    flow: ConnectFlow,
 ) -> Result<ConnectSessionResult, (StatusCode, Json<Value>)> {
+    let path = match flow {
+        ConnectFlow::Create => "/api/wallet_create_result",
+        ConnectFlow::Access => "/api/wallet_connect_result",
+    };
     let response = http_client()
-        .post(CONNECT_RESULT_URL)
+        .post(format!("{CONNECT_BASE_URL}{path}"))
         .json(&serde_json::json!({ "session_id": session_id }))
         .send()
         .await
@@ -133,16 +157,17 @@ pub async fn register(
         ));
     }
 
-    let connect_result = fetch_connect_result(&request.session_id).await?;
-    let connect_pubkey = approved_connect_pubkey(connect_result).map_err(|error| match error {
-        ConnectApprovalError::Expired => api_error(StatusCode::GONE, "connect_session_expired"),
-        ConnectApprovalError::NotApproved => {
-            api_error(StatusCode::CONFLICT, "connect_session_not_approved")
-        }
-        ConnectApprovalError::Invalid => {
-            api_error(StatusCode::BAD_GATEWAY, "nuri_connect_response_invalid")
-        }
-    })?;
+    let connect_result = fetch_connect_result(&request.session_id, request.flow).await?;
+    let connect_pubkey = approved_connect_pubkey(connect_result, &request.session_id, request.flow)
+        .map_err(|error| match error {
+            ConnectApprovalError::Expired => api_error(StatusCode::GONE, "connect_session_expired"),
+            ConnectApprovalError::NotApproved => {
+                api_error(StatusCode::CONFLICT, "connect_session_not_approved")
+            }
+            ConnectApprovalError::Invalid => {
+                api_error(StatusCode::BAD_GATEWAY, "nuri_connect_response_invalid")
+            }
+        })?;
     if connect_pubkey != signer {
         return Err(api_error(
             StatusCode::FORBIDDEN,
@@ -185,9 +210,16 @@ mod tests {
     use super::*;
     use nostr::Keys;
 
-    fn result(status: &str, pubkey: Option<String>) -> ConnectSessionResult {
+    fn result(
+        status: &str,
+        kind: &str,
+        session_id: &str,
+        pubkey: Option<String>,
+    ) -> ConnectSessionResult {
         ConnectSessionResult {
             status: status.to_string(),
+            kind: kind.to_string(),
+            session_id: session_id.to_string(),
             wallet: pubkey.map(|nostr_pubkey_hex| ConnectWallet { nostr_pubkey_hex }),
         }
     }
@@ -202,27 +234,70 @@ mod tests {
     #[test]
     fn approved_result_returns_the_connect_nostr_key() {
         let keys = Keys::generate();
-        let pubkey = approved_connect_pubkey(result("approved", Some(keys.public_key().to_hex())))
-            .expect("approved key");
+        let session_id = "a1".repeat(32);
+        let pubkey = approved_connect_pubkey(
+            result(
+                "approved",
+                "connect",
+                &session_id,
+                Some(keys.public_key().to_hex()),
+            ),
+            &session_id,
+            ConnectFlow::Access,
+        )
+        .expect("approved key");
         assert_eq!(pubkey, keys.public_key());
     }
 
     #[test]
     fn pending_expired_and_malformed_results_fail_closed() {
+        let session_id = "a1".repeat(32);
         assert_eq!(
-            approved_connect_pubkey(result("pending", None)),
+            approved_connect_pubkey(
+                result("pending", "connect", &session_id, None),
+                &session_id,
+                ConnectFlow::Access,
+            ),
             Err(ConnectApprovalError::NotApproved)
         );
         assert_eq!(
-            approved_connect_pubkey(result("expired", None)),
+            approved_connect_pubkey(
+                result("expired", "connect", &session_id, None),
+                &session_id,
+                ConnectFlow::Access,
+            ),
             Err(ConnectApprovalError::Expired)
         );
         assert_eq!(
-            approved_connect_pubkey(result("approved", None)),
+            approved_connect_pubkey(
+                result("approved", "connect", &session_id, None),
+                &session_id,
+                ConnectFlow::Access,
+            ),
             Err(ConnectApprovalError::Invalid)
         );
         assert_eq!(
-            approved_connect_pubkey(result("approved", Some("zz".repeat(32)))),
+            approved_connect_pubkey(
+                result("approved", "connect", &session_id, Some("zz".repeat(32)),),
+                &session_id,
+                ConnectFlow::Access,
+            ),
+            Err(ConnectApprovalError::Invalid)
+        );
+        assert_eq!(
+            approved_connect_pubkey(
+                result("approved", "create", &session_id, None),
+                &session_id,
+                ConnectFlow::Access,
+            ),
+            Err(ConnectApprovalError::Invalid)
+        );
+        assert_eq!(
+            approved_connect_pubkey(
+                result("approved", "connect", &"b2".repeat(32), None),
+                &session_id,
+                ConnectFlow::Access,
+            ),
             Err(ConnectApprovalError::Invalid)
         );
     }

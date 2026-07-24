@@ -12,7 +12,7 @@ export type ConnectPending = {
 
 export type ConnectApprovedResult = {
   status: "approved";
-  kind: string;
+  kind: "create" | "connect";
   session_id: string;
   wallet: NuriWalletPublic & {
     cred_id_b64u?: string;
@@ -33,6 +33,27 @@ type ConnectPollResult =
       status: "pending" | "binding" | "awaiting_nostr" | "expired";
       session_id: string;
     };
+
+export function validSessionId(value: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(value);
+}
+
+export function validApprovalUrl(
+  value: string,
+  sessionId: string,
+  flow: ConnectFlow,
+): boolean {
+  try {
+    const url = new URL(value);
+    const pathPrefix = flow === "create" ? "create" : "approve";
+    return (
+      url.origin === CONNECT_BASE_URL &&
+      url.pathname === `/${pathPrefix}/${sessionId}`
+    );
+  } catch {
+    return false;
+  }
+}
 
 function endpoint(flow: ConnectFlow, action: "start" | "result"): string {
   if (flow === "create") return `/api/wallet_create_${action}`;
@@ -66,7 +87,11 @@ export async function startConnectFlow(
     endpoint(flow, "start"),
     { return_url: callback.toString() },
   );
-  if (!result.session_id || !result.approval_url) {
+  if (
+    result.status !== "pending" ||
+    !validSessionId(result.session_id) ||
+    !validApprovalUrl(result.approval_url, result.session_id, flow)
+  ) {
     throw new Error("connect_start_response_invalid");
   }
   sessionStorage.setItem(
@@ -109,7 +134,18 @@ export async function waitForConnectApproval(
       endpoint(pending.flow, "result"),
       { session_id: pending.sessionId },
     );
-    if (result.status === "approved") return result;
+    if (result.status === "approved") {
+      const expectedKind = pending.flow === "create" ? "create" : "connect";
+      if (
+        result.session_id !== pending.sessionId ||
+        result.kind !== expectedKind
+      ) {
+        throw new Error(
+          "Connect approval response does not match this session",
+        );
+      }
+      return result;
+    }
     if (result.status === "expired") throw new Error("Connect session expired");
     await new Promise((resolve) => window.setTimeout(resolve, 1_000));
   }

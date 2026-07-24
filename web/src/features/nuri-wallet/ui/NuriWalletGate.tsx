@@ -56,7 +56,7 @@ export function NuriWalletGate({ children }: { children: ReactNode }) {
 
       setStatus("Creating your Buzz membership…");
       try {
-        await registerNuriMember(approved.session_id);
+        await registerNuriMember(approved.session_id, pending.flow);
       } catch (registrationError) {
         lockNuriSigner();
         throw registrationError;
