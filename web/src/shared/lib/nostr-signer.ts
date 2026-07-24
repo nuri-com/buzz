@@ -76,6 +76,19 @@ export function hasBrowserSigner(): boolean {
   return hasNuriSigner() || hasNip07Provider();
 }
 
+export async function getBrowserPublicKey(): Promise<string> {
+  if (nuriSecretKey) {
+    return getPublicKey(nuriSecretKey);
+  }
+  const provider = typeof window === "undefined" ? undefined : window.nostr;
+  if (!provider) throw new Nip07UnavailableError();
+  const pubkey = await provider.getPublicKey();
+  if (!/^[0-9a-f]{64}$/i.test(pubkey)) {
+    throw new Error("The NIP-07 extension returned an invalid public key.");
+  }
+  return pubkey.toLowerCase();
+}
+
 function sameUnsignedEvent(
   expected: UnsignedNostrEvent,
   actual: SignedNostrEvent,
