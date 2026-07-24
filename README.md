@@ -156,6 +156,21 @@ For a split-terminal workflow (relay logs separate from Vite output), use `just 
 
 For agents, set `BUZZ_PRIVATE_KEY` and use [`buzz-cli`](crates/buzz-cli) — JSON in, JSON out, designed for LLM tool calls.
 
+### Nuri web deployment — 2026-07-24
+
+The Nuri fork runs the Buzz web client at `https://support.nuri.com` and keeps the existing support dashboard at `https://support.nuri.com/inbox`.
+
+A user starts with **Create Nuri Wallet** or **Use existing wallet**. Buzz hands the browser to `connect.nuri.com`, which creates or opens the existing `nuri-expo-wallet-v1` passkey wallet. After Connect returns, Buzz asks for the same `nuri.com` passkey once more and derives the wallet locally. The complete public wallet tuple must match the approved Connect result before Buzz unlocks.
+
+The same wallet contains separate Bitcoin, Arkade, Ethereum, and Nostr keys. Buzz keeps only a copy of the Nostr private key in memory for the current tab. Bitcoin and Ethereum private keys, PRF output, and temporary derivation keys are zeroized immediately. No private key is stored in cookies, local storage, session storage, IndexedDB, Postgres, or the relay.
+
+The relay remains closed with `BUZZ_REQUIRE_RELAY_MEMBERSHIP=true`. `POST /api/nuri/register` requires both:
+
+1. an approved Connect wallet session, and
+2. a payload-bound NIP-98 signature from the exact Nostr pubkey in that wallet.
+
+Only then is the pubkey added as a relay member. Arkade and Lightning operations continue through Connect instead of exposing wallet keys to Buzz.
+
 ---
 
 ## Windows prerequisites
