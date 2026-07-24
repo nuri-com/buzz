@@ -30,7 +30,9 @@ declare global {
 
 export class Nip07UnavailableError extends Error {
   constructor() {
-    super("Unlock a Nuri Passkey Wallet or install a NIP-07 browser extension.");
+    super(
+      "Unlock a Nuri Passkey Wallet or install a NIP-07 browser extension.",
+    );
     this.name = "Nip07UnavailableError";
   }
 }

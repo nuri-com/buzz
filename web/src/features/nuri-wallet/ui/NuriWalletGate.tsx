@@ -123,7 +123,11 @@ export function NuriWalletGate({ children }: { children: ReactNode }) {
         </div>
 
         <div className="mt-6 grid gap-3">
-          <Button disabled={busy} size="lg" onClick={() => void start("create")}>
+          <Button
+            disabled={busy}
+            size="lg"
+            onClick={() => void start("create")}
+          >
             <WalletCards /> Create Nuri Wallet
           </Button>
           <Button

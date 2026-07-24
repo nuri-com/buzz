@@ -50,7 +50,9 @@ async function connectRequest<T>(path: string, body: unknown): Promise<T> {
     unknown
   >;
   if (!response.ok) {
-    throw new Error(String(value.error ?? `connect_request_failed_${response.status}`));
+    throw new Error(
+      String(value.error ?? `connect_request_failed_${response.status}`),
+    );
   }
   return value as T;
 }
@@ -69,7 +71,10 @@ export async function startConnectFlow(
   }
   sessionStorage.setItem(
     PENDING_KEY,
-    JSON.stringify({ flow, sessionId: result.session_id } satisfies ConnectPending),
+    JSON.stringify({
+      flow,
+      sessionId: result.session_id,
+    } satisfies ConnectPending),
   );
   return result;
 }

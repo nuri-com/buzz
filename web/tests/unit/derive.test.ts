@@ -21,8 +21,7 @@ const APP_GOLDEN_VECTOR = {
     "e5866050df9d4888ac8b41faf5e0440a5fb55c7606356fa05df8d4469b9525638c34245093c93bad4053c687ec46b81423d1f039b91b1ebb82142bf90b80d3ca",
   nostr_pubkey_hex:
     "cb39417613bb55225a751ffa14d7099e6c06c9da59936dacdd36824ad447e47f",
-  nostr_npub:
-    "npub1evu5zasnhd2jykn4rlapf4cfnekqdjw6txfkmtxax6py44z8u3lsl63q4l",
+  nostr_npub: "npub1evu5zasnhd2jykn4rlapf4cfnekqdjw6txfkmtxax6py44z8u3lsl63q4l",
 };
 
 test("matches the frozen Nuri Expo PRF vector", () => {
@@ -39,7 +38,16 @@ test("matches the frozen Nuri Expo PRF vector", () => {
 test("zeroizes every derived private key", () => {
   const wallet = deriveNuriWallet(new Uint8Array(32).fill(7));
   zeroizeNuriWallet(wallet);
-  assert.equal(wallet.secrets.bitcoin_private_key.every((byte) => byte === 0), true);
-  assert.equal(wallet.secrets.ethereum_private_key.every((byte) => byte === 0), true);
-  assert.equal(wallet.secrets.nostr_private_key.every((byte) => byte === 0), true);
+  assert.equal(
+    wallet.secrets.bitcoin_private_key.every((byte) => byte === 0),
+    true,
+  );
+  assert.equal(
+    wallet.secrets.ethereum_private_key.every((byte) => byte === 0),
+    true,
+  );
+  assert.equal(
+    wallet.secrets.nostr_private_key.every((byte) => byte === 0),
+    true,
+  );
 });

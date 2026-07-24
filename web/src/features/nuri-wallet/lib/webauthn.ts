@@ -8,10 +8,8 @@ import {
 function base64UrlToBuffer(value: string): ArrayBuffer {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/");
   const decoded = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, "="));
-  return Uint8Array.from(
-    decoded,
-    (character) => character.charCodeAt(0),
-  ).buffer;
+  return Uint8Array.from(decoded, (character) => character.charCodeAt(0))
+    .buffer;
 }
 
 function readPrf(credential: PublicKeyCredential): Uint8Array | null {

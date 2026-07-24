@@ -9,9 +9,7 @@ export const NURI_DERIVATION_VERSION = "nuri-expo-wallet-v1";
 export const NURI_PRF_SALT = "nuri-prf-salt-v1";
 
 const WALLET_SALT = sha256(utf8("app:nuri.com|wallet|v1"));
-const BITCOIN_INFO = utf8(
-  "app:nuri.com|wallet|v1|chain=bitcoin|fmt=taproot",
-);
+const BITCOIN_INFO = utf8("app:nuri.com|wallet|v1|chain=bitcoin|fmt=taproot");
 const ETHEREUM_INFO = utf8(
   "app:nuri.com|wallet|v1|chain=ethereum|fmt=secp256k1",
 );
@@ -111,20 +109,8 @@ function ethereumChecksumAddress(publicKey: Uint8Array): string {
 }
 
 export function deriveNuriWallet(prf: Uint8Array): NuriWallet {
-  const bitcoinEntropy = hkdf(
-    sha256,
-    prf,
-    WALLET_SALT,
-    BITCOIN_INFO,
-    32,
-  );
-  const ethereumEntropy = hkdf(
-    sha256,
-    prf,
-    WALLET_SALT,
-    ETHEREUM_INFO,
-    32,
-  );
+  const bitcoinEntropy = hkdf(sha256, prf, WALLET_SALT, BITCOIN_INFO, 32);
+  const ethereumEntropy = hkdf(sha256, prf, WALLET_SALT, ETHEREUM_INFO, 32);
   const bitcoinRoot = HDKey.fromMasterSeed(bitcoinEntropy);
   const ethereumRoot = HDKey.fromMasterSeed(ethereumEntropy);
   const bitcoinChild = bitcoinRoot.derive(BIP86_PATH);

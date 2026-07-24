@@ -20,6 +20,8 @@ export async function registerNuriMember(sessionId: string): Promise<void> {
     error?: string;
   };
   if (!response.ok) {
-    throw new Error(result.error ?? `Buzz registration failed (${response.status})`);
+    throw new Error(
+      result.error ?? `Buzz registration failed (${response.status})`,
+    );
   }
 }
