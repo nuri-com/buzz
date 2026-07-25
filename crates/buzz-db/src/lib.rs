@@ -43,6 +43,8 @@ pub mod reaction;
 pub mod relay_members;
 /// Replica freshness fence for keyset-cursor read routing.
 pub mod replica_fence;
+/// Space self-service persistence.
+pub mod space;
 /// Thread metadata persistence.
 pub mod thread;
 /// Per-community usage rollup queries for Prometheus gauges.
@@ -941,6 +943,43 @@ impl Db {
                 host,
             },
         ))
+    }
+
+    /// Atomically create a Space with the signer as sole owner and a #general
+    /// stream channel. Enforces `MAX_COMMUNITIES_PER_OWNER` and host collision
+    /// semantics via the same advisory-lock pattern as
+    /// [`create_community_with_owner`].
+    pub async fn create_space(
+        &self,
+        slug: &str,
+        space_name: &str,
+        visibility: &str,
+        owner_pubkey: &str,
+    ) -> Result<space::CreateSpaceResult> {
+        space::create_space(&self.pool, slug, space_name, visibility, owner_pubkey).await
+    }
+
+    /// List active public Spaces, plus any active Spaces where `member_pubkey`
+    /// is a relay member.
+    pub async fn list_spaces(
+        &self,
+        member_pubkey: Option<&str>,
+    ) -> Result<Vec<space::SpaceRecord>> {
+        space::list_spaces(&self.pool, member_pubkey).await
+    }
+
+    /// Look up a Space by its slug.
+    pub async fn lookup_space_by_slug(
+        &self,
+        slug: &str,
+    ) -> Result<Option<(CommunityId, String, String, String, Uuid)>> {
+        space::lookup_space_by_slug(&self.pool, slug).await
+    }
+
+    /// Idempotently join a public Space: add the pubkey as a relay member
+    /// of the target community.
+    pub async fn join_space(&self, community_id: CommunityId, pubkey: &str) -> Result<bool> {
+        space::join_space(&self.pool, community_id, pubkey).await
     }
 
     /// Idempotently archives a community when the asserted pubkey is its current owner.
