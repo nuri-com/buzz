@@ -3,6 +3,7 @@ import test from "node:test";
 import { getPublicKey } from "nostr-tools/pure";
 
 import {
+  getBrowserPublicKey,
   hasNuriSigner,
   lockNuriSigner,
   signNostrEvent,
@@ -16,6 +17,7 @@ test("Nuri signer signs from a copied session key and locks cleanly", async () =
   assert.equal(unlockNuriSigner(secretKey), expectedPubkey);
   secretKey.fill(0);
   assert.equal(hasNuriSigner(), true);
+  assert.equal(await getBrowserPublicKey(), expectedPubkey);
 
   const signed = await signNostrEvent({
     kind: 1,

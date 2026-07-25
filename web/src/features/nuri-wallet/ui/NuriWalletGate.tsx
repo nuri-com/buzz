@@ -3,7 +3,11 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import buzzAppIcon from "@/assets/app-icon@3x.png";
-import { lockNuriSigner, unlockNuriSigner } from "@/shared/lib/nostr-signer";
+import {
+  hasNuriSigner,
+  lockNuriSigner,
+  unlockNuriSigner,
+} from "@/shared/lib/nostr-signer";
 import { Button } from "@/shared/ui/button";
 import {
   clearPendingConnectFlow,
@@ -26,7 +30,9 @@ function isLocalPreview(): boolean {
 }
 
 export function NuriWalletGate({ children }: { children: ReactNode }) {
-  const [unlocked, setUnlocked] = useState(isLocalPreview);
+  const [unlocked, setUnlocked] = useState(
+    () => hasNuriSigner() || isLocalPreview(),
+  );
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");

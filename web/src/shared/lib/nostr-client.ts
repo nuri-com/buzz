@@ -24,6 +24,7 @@ export interface NostrFilter {
 export type NostrEvent = SignedNostrEvent;
 
 const QUERY_TIMEOUT_MS = 10_000;
+const PUBLISH_TIMEOUT_MS = 10_000;
 
 /**
  * Open a WebSocket to `wsUrl`, authenticate via NIP-42 if challenged,
@@ -172,4 +173,215 @@ export function queryEvents(
       }
     });
   });
+}
+
+/** Publish a signed event and wait for the relay's matching `OK` response. */
+export function publishEvent(wsUrl: string, event: NostrEvent): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+    let settled = false;
+    let eventSent = false;
+    let authEventId: string | null = null;
+    let unauthenticatedPublishTimer: ReturnType<typeof setTimeout> | null =
+      null;
+
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (unauthenticatedPublishTimer) {
+        clearTimeout(unauthenticatedPublishTimer);
+      }
+      ws.close();
+      if (error) reject(error);
+      else resolve();
+    };
+
+    const timeout = setTimeout(
+      () =>
+        finish(
+          new Error(`Relay publish timed out after ${PUBLISH_TIMEOUT_MS}ms`),
+        ),
+      PUBLISH_TIMEOUT_MS,
+    );
+
+    const sendEvent = () => {
+      if (eventSent || settled) return;
+      eventSent = true;
+      ws.send(JSON.stringify(["EVENT", event]));
+    };
+
+    ws.addEventListener("open", () => {
+      unauthenticatedPublishTimer = setTimeout(sendEvent, 100);
+    });
+
+    ws.addEventListener("message", async (message) => {
+      let data: unknown;
+      try {
+        data = JSON.parse(String(message.data));
+      } catch {
+        return;
+      }
+      if (!Array.isArray(data)) return;
+
+      if (data[0] === "AUTH" && typeof data[1] === "string") {
+        if (unauthenticatedPublishTimer) {
+          clearTimeout(unauthenticatedPublishTimer);
+          unauthenticatedPublishTimer = null;
+        }
+        try {
+          const authEvent = await signNostrEvent(makeAuthEvent(wsUrl, data[1]));
+          if (settled) return;
+          authEventId = authEvent.id;
+          ws.send(JSON.stringify(["AUTH", authEvent]));
+        } catch (error) {
+          finish(
+            error instanceof Error
+              ? error
+              : new Error("Failed to sign relay authentication."),
+          );
+        }
+        return;
+      }
+
+      if (data[0] !== "OK") return;
+      if (data[1] === authEventId) {
+        if (data[2] === true) sendEvent();
+        else {
+          finish(
+            new Error(
+              typeof data[3] === "string"
+                ? data[3]
+                : "Relay authentication failed.",
+            ),
+          );
+        }
+      } else if (data[1] === event.id) {
+        if (data[2] === true) finish();
+        else {
+          finish(
+            new Error(
+              typeof data[3] === "string"
+                ? data[3]
+                : "Relay rejected the event.",
+            ),
+          );
+        }
+      }
+    });
+
+    ws.addEventListener("error", () => {
+      finish(new Error("WebSocket connection failed"));
+    });
+    ws.addEventListener("close", () => {
+      if (!settled)
+        finish(new Error("Relay closed before acknowledging event."));
+    });
+  });
+}
+
+type SubscriptionCallbacks = {
+  onEvent(event: NostrEvent): void;
+  onEose?(): void;
+  onError?(error: Error): void;
+};
+
+/** Maintain a live NIP-01 subscription until the returned cleanup is called. */
+export function subscribeEvents(
+  wsUrl: string,
+  filter: NostrFilter,
+  callbacks: SubscriptionCallbacks,
+): () => void {
+  const ws = new WebSocket(wsUrl);
+  const subId = `live-${Date.now().toString(36)}-${crypto.randomUUID()}`;
+  let closedByClient = false;
+  let reqSent = false;
+  let authEventId: string | null = null;
+  let unauthenticatedReqTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const reportError = (error: Error) => {
+    if (!closedByClient) callbacks.onError?.(error);
+  };
+  const sendReq = () => {
+    if (reqSent || closedByClient) return;
+    reqSent = true;
+    ws.send(JSON.stringify(["REQ", subId, filter]));
+  };
+
+  ws.addEventListener("open", () => {
+    unauthenticatedReqTimer = setTimeout(sendReq, 100);
+  });
+  ws.addEventListener("message", async (message) => {
+    let data: unknown;
+    try {
+      data = JSON.parse(String(message.data));
+    } catch {
+      return;
+    }
+    if (!Array.isArray(data)) return;
+
+    if (data[0] === "AUTH" && typeof data[1] === "string") {
+      if (unauthenticatedReqTimer) {
+        clearTimeout(unauthenticatedReqTimer);
+        unauthenticatedReqTimer = null;
+      }
+      try {
+        const authEvent = await signNostrEvent(makeAuthEvent(wsUrl, data[1]));
+        if (closedByClient) return;
+        authEventId = authEvent.id;
+        ws.send(JSON.stringify(["AUTH", authEvent]));
+      } catch (error) {
+        reportError(
+          error instanceof Error
+            ? error
+            : new Error("Failed to sign relay authentication."),
+        );
+        ws.close();
+      }
+      return;
+    }
+
+    if (data[0] === "OK" && data[1] === authEventId) {
+      if (data[2] === true) sendReq();
+      else {
+        reportError(
+          new Error(
+            typeof data[3] === "string"
+              ? data[3]
+              : "Relay authentication failed.",
+          ),
+        );
+        ws.close();
+      }
+    } else if (data[0] === "EVENT" && data[1] === subId && data[2]) {
+      callbacks.onEvent(data[2] as NostrEvent);
+    } else if (data[0] === "EOSE" && data[1] === subId) {
+      callbacks.onEose?.();
+    } else if (data[0] === "CLOSED" && data[1] === subId) {
+      reportError(
+        new Error(
+          typeof data[2] === "string"
+            ? data[2]
+            : "Relay closed the subscription.",
+        ),
+      );
+    }
+  });
+  ws.addEventListener("error", () => {
+    reportError(new Error("WebSocket connection failed"));
+  });
+  ws.addEventListener("close", () => {
+    if (!closedByClient && reqSent) {
+      reportError(new Error("Relay subscription disconnected."));
+    }
+  });
+
+  return () => {
+    closedByClient = true;
+    if (unauthenticatedReqTimer) clearTimeout(unauthenticatedReqTimer);
+    if (reqSent && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(["CLOSE", subId]));
+    }
+    ws.close();
+  };
 }
