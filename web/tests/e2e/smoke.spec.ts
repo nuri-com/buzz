@@ -16,7 +16,7 @@ test("home page requires a Nuri wallet", async ({ page }) => {
 });
 
 test("home page shows repositories section", async ({ page }) => {
-  await page.goto("/?preview=repositories");
+  await page.goto("/repos?preview=repositories");
   await expect(page.getByText("Repositories")).toBeVisible();
 });
 
