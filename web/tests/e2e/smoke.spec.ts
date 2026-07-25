@@ -20,6 +20,88 @@ test("home page shows repositories section", async ({ page }) => {
   await expect(page.getByText("Repositories")).toBeVisible();
 });
 
+test("Nuri identity can discover and join a public Space", async ({ page }) => {
+  const pubkey = "ab".repeat(32);
+  await page.addInitScript((extensionPubkey) => {
+    (
+      window as Window & {
+        nostr?: {
+          getPublicKey(): Promise<string>;
+          signEvent(
+            event: Record<string, unknown>,
+          ): Promise<Record<string, unknown>>;
+        };
+      }
+    ).nostr = {
+      async getPublicKey() {
+        return extensionPubkey;
+      },
+      async signEvent(event) {
+        return {
+          ...event,
+          id: "cd".repeat(32),
+          pubkey: extensionPubkey,
+          sig: "ef".repeat(64),
+        };
+      },
+    };
+  }, pubkey);
+
+  const publicSpace = {
+    community_id: "11111111-1111-4111-8111-111111111111",
+    name: "Nuri Builders",
+    slug: "nuri-builders",
+    host: "nuri-builders.relay.nuri.com",
+    visibility: "public",
+    role: null,
+    is_member: false,
+  };
+  let joined = false;
+  await page.route("**/api/nuri/spaces", async (route) => {
+    const request = route.request();
+    expect(request.headers().authorization).toMatch(/^Nostr /);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        spaces: [
+          joined
+            ? { ...publicSpace, role: "member", is_member: true }
+            : publicSpace,
+        ],
+      }),
+    });
+  });
+  await page.route("**/api/nuri/spaces/join", async (route) => {
+    const request = route.request();
+    expect(JSON.parse(request.postData() ?? "{}")).toEqual({
+      slug: "nuri-builders",
+    });
+    expect(request.headers().authorization).toMatch(/^Nostr /);
+    joined = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...publicSpace,
+        role: "member",
+        is_member: true,
+      }),
+    });
+  });
+
+  await page.goto("/?preview=spaces");
+  await expect(page.getByRole("heading", { name: "Nuri Chat" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Public Spaces" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Nuri Builders Public/ }).click();
+  await expect(page.getByText("nuri-builders.relay.nuri.com")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Nuri Builders" }),
+  ).toBeVisible();
+});
+
 test("invite requires age and legal consent before opening Buzz", async ({
   page,
 }) => {

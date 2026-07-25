@@ -8,6 +8,7 @@ import { getBrowserPublicKey, signNostrEvent } from "@/shared/lib/nostr-signer";
 import { relayWsUrl } from "@/shared/lib/relay-url";
 import {
   type ChatChannel,
+  includeBootstrapGeneralChannel,
   mergeChatMessages,
   projectChatChannels,
   selectAutoJoinChannel,
@@ -38,31 +39,44 @@ export type ChatCatalog = {
   channels: ChatChannel[];
 };
 
-export async function loadChatCatalog(): Promise<ChatCatalog> {
-  const wsUrl = relayWsUrl();
+export async function loadChatCatalog(
+  wsUrl = relayWsUrl(),
+  bootstrapGeneralChannelId?: string,
+): Promise<ChatCatalog> {
   const pubkey = await getBrowserPublicKey();
-  let channels = await queryChannelCatalog(wsUrl, pubkey);
+  let channels = includeBootstrapGeneralChannel(
+    await queryChannelCatalog(wsUrl, pubkey),
+    bootstrapGeneralChannelId,
+  );
   const autoJoin = selectAutoJoinChannel(channels);
   if (autoJoin) {
-    await joinChatChannel(autoJoin.id);
-    channels = await queryChannelCatalog(wsUrl, pubkey);
+    await joinChatChannel(autoJoin.id, wsUrl);
+    channels = includeBootstrapGeneralChannel(
+      await queryChannelCatalog(wsUrl, pubkey),
+      bootstrapGeneralChannelId,
+      true,
+    );
   }
   return { pubkey, channels };
 }
 
-export async function joinChatChannel(channelId: string): Promise<void> {
+export async function joinChatChannel(
+  channelId: string,
+  wsUrl = relayWsUrl(),
+): Promise<void> {
   const signed = await signNostrEvent({
     kind: 9021,
     tags: [["h", channelId]],
     content: "",
   });
-  await publishEvent(relayWsUrl(), signed);
+  await publishEvent(wsUrl, signed);
 }
 
 export async function loadChatMessages(
   channelId: string,
+  wsUrl = relayWsUrl(),
 ): Promise<NostrEvent[]> {
-  const events = await queryEvents(relayWsUrl(), {
+  const events = await queryEvents(wsUrl, {
     kinds: CHAT_MESSAGE_KINDS,
     "#h": [channelId],
     limit: MESSAGE_QUERY_LIMIT,
@@ -73,6 +87,7 @@ export async function loadChatMessages(
 export async function sendChatMessage(
   channelId: string,
   content: string,
+  wsUrl = relayWsUrl(),
 ): Promise<NostrEvent> {
   const trimmed = content.trim();
   if (!trimmed) throw new Error("Write a message first.");
@@ -84,7 +99,7 @@ export async function sendChatMessage(
     tags: [["h", channelId]],
     content: trimmed,
   });
-  await publishEvent(relayWsUrl(), signed);
+  await publishEvent(wsUrl, signed);
   return signed;
 }
 
@@ -92,9 +107,10 @@ export function subscribeToChatChannel(
   channelId: string,
   onEvent: (event: NostrEvent) => void,
   onError: (error: Error) => void,
+  wsUrl = relayWsUrl(),
 ): () => void {
   return subscribeEvents(
-    relayWsUrl(),
+    wsUrl,
     {
       kinds: CHAT_MESSAGE_KINDS,
       "#h": [channelId],

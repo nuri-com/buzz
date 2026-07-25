@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  includeBootstrapGeneralChannel,
   mergeChatMessages,
   projectChatChannels,
   selectAutoJoinChannel,
@@ -107,6 +108,27 @@ test("selects the single open general channel only for a new member", () => {
       { ...general, id: "22222222-2222-4222-8222-222222222222" },
     ]),
     null,
+  );
+});
+
+test("adds a server-confirmed bootstrap general channel without replacing metadata", () => {
+  const generalId = "11111111-1111-4111-8111-111111111111";
+  const fallback = includeBootstrapGeneralChannel([], generalId);
+  assert.deepEqual(fallback, [
+    {
+      id: generalId,
+      name: "general",
+      type: "stream",
+      visibility: "open",
+      isMember: false,
+    },
+  ]);
+
+  const projected = [{ ...fallback[0], name: "welcome", isMember: true }];
+  assert.equal(
+    includeBootstrapGeneralChannel(projected, generalId),
+    projected,
+    "existing Nostr metadata keeps its original reference and values",
   );
 });
 
