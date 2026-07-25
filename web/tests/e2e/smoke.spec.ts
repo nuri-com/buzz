@@ -15,6 +15,52 @@ test("home page requires a Nuri wallet", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("Connect return waits for a focused unlock action", async ({ page }) => {
+  const sessionId = "a1".repeat(32);
+  const returnNonce = "7f7f5a37-605d-4400-96fc-4cd234f8ffcb";
+  let resultRequests = 0;
+
+  await page.addInitScript(
+    ({ pendingSessionId, pendingReturnNonce }) => {
+      sessionStorage.setItem(
+        "nuri-buzz-connect-pending-v1",
+        JSON.stringify({
+          flow: "access",
+          sessionId: pendingSessionId,
+          returnNonce: pendingReturnNonce,
+        }),
+      );
+      Object.defineProperty(navigator, "credentials", {
+        configurable: true,
+        value: {
+          get: async () => {
+            throw new Error("WebAuthn must wait for a user click");
+          },
+        },
+      });
+    },
+    { pendingSessionId: sessionId, pendingReturnNonce: returnNonce },
+  );
+  await page.route(
+    "https://connect.nuri.com/api/wallet_connect_result",
+    (route) => {
+      resultRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "pending", session_id: sessionId }),
+      });
+    },
+  );
+
+  await page.goto(`/?nuri_connect=${returnNonce}`);
+
+  await expect(
+    page.getByRole("button", { name: "Use Passkey & Open Chat" }),
+  ).toBeVisible();
+  expect(resultRequests).toBe(0);
+});
+
 test("home page shows repositories section", async ({ page }) => {
   await page.goto("/repos?preview=repositories");
   await expect(page.getByText("Repositories")).toBeVisible();
