@@ -13,9 +13,12 @@ import { useMembers } from "../use-members";
 export function MembersSection({
   connection,
   onError,
+  self,
 }: {
   connection: RelayConnection | null;
   onError: (reason: string) => void;
+  /** Pubkey this browser signs with — the one row you can never act on. */
+  self: string | null;
 }) {
   const { members, addMember, setRole, removeMember } = useMembers(
     connection,
@@ -120,11 +123,16 @@ export function MembersSection({
               <span className="text-black/50 dark:text-white/50">
                 {member.role}
               </span>
-              {member.role === "owner" ? (
-                // The relay refuses every role change on the owner; showing
-                // buttons that always fail would be a lie.
+              {member.pubkey === self ? (
+                // Your own row is the only one we can hide with certainty: the
+                // relay refuses "cannot change your own role" and "cannot
+                // remove yourself" regardless of who you are. Every other row
+                // keeps its buttons, because this list is a relay-signed
+                // snapshot that is NOT republished after an owner rotation —
+                // hiding by the role it claims would lock you out of removing
+                // a previous owner that is already demoted in the database.
                 <span className="text-xs text-black/40 dark:text-white/40">
-                  set via RELAY_OWNER_PUBKEY
+                  you
                 </span>
               ) : (
                 <>

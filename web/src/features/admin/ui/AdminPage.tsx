@@ -182,7 +182,11 @@ export function AdminPage() {
         </ul>
       )}
 
-      <MembersSection connection={connection} onError={setError} />
+      <MembersSection
+        connection={connection}
+        onError={setError}
+        self={identity}
+      />
     </div>
   );
 }

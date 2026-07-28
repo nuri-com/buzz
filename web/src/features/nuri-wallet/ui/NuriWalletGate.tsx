@@ -46,7 +46,13 @@ export function NuriWalletGate({ children }: { children: ReactNode }) {
 
     try {
       const approved = await waitForConnectApproval(pending);
-      setStatus("Unlock the same passkey once for Buzz…");
+      // The passkey prompt needs a focused document; say so instead of
+      // appearing stuck while unlockNuriPasskey waits for the focus event.
+      setStatus(
+        document.hasFocus()
+          ? "Unlock the same passkey once for Buzz…"
+          : "Click anywhere in this window to continue…",
+      );
       const wallet = await unlockNuriPasskey(approved.wallet.cred_id_b64u);
       try {
         assertSameNuriWallet(wallet.public, approved.wallet);
