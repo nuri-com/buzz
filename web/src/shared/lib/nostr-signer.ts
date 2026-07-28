@@ -39,6 +39,7 @@ export class Nip07UnavailableError extends Error {
 
 let ephemeralSecretKey: Uint8Array | null = null;
 let nuriSecretKey: Uint8Array | null = null;
+let nuriPubkey: string | null = null;
 
 function zeroizeSecretKey(secretKey: Uint8Array | null): void {
   secretKey?.fill(0);
@@ -49,12 +50,21 @@ export function unlockNuriSigner(secretKey: Uint8Array): string {
   const pubkey = getPublicKey(copy);
   zeroizeSecretKey(nuriSecretKey);
   nuriSecretKey = copy;
+  nuriPubkey = pubkey;
   return pubkey;
 }
 
 export function lockNuriSigner(): void {
   zeroizeSecretKey(nuriSecretKey);
   nuriSecretKey = null;
+  nuriPubkey = null;
+}
+
+/** Public key of whichever signer would sign right now, or null if none. */
+export async function currentSignerPubkey(): Promise<string | null> {
+  if (nuriPubkey) return nuriPubkey;
+  const provider = typeof window === "undefined" ? undefined : window.nostr;
+  return provider ? await provider.getPublicKey() : null;
 }
 
 export function hasNuriSigner(): boolean {
