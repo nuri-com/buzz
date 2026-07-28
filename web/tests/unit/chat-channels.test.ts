@@ -35,14 +35,17 @@ test("keeps the newest metadata per channel and sorts by name", () => {
   );
 });
 
-test("hides DMs and private channels", () => {
+test("hides DMs but keeps private channels the relay handed back", () => {
   const channels = toChannels([
     metadata("dm", "direct", 10, [["hidden"]]),
     metadata("secret", "secret", 10, [["private"]]),
     metadata("open", "support", 10, [["public"]]),
   ]);
   assert.deepEqual(
-    channels.map((channel) => channel.id),
-    ["open"],
+    channels.map((channel) => [channel.id, channel.visibility]),
+    [
+      ["secret", "private"],
+      ["open", "open"],
+    ],
   );
 });
