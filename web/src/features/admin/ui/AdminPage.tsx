@@ -4,13 +4,19 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import type { ChannelVisibility } from "@/features/chat/channels";
+import { useRelayConnection } from "@/shared/lib/use-relay-connection";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { useChannelAdmin } from "../use-channel-admin";
+import { MembersSection } from "./MembersSection";
 
 export function AdminPage() {
-  const { channels, error, connected, createChannel, setVisibility } =
-    useChannelAdmin();
+  const { connection, error, setError } = useRelayConnection();
+  const { channels, createChannel, setVisibility } = useChannelAdmin(
+    connection,
+    setError,
+  );
+  const connected = connection !== null;
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
   const [visibility, setVisibilityChoice] = useState<ChannelVisibility>("open");
@@ -144,6 +150,8 @@ export function AdminPage() {
           ))}
         </ul>
       )}
+
+      <MembersSection connection={connection} onError={setError} />
     </div>
   );
 }

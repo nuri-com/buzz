@@ -1,23 +1,26 @@
 /**
  * Channel administration over plain Nostr events.
  *
- * kind:9007 (create) and kind:9002 (edit metadata) are authorized by the relay
- * per kind against the signing pubkey. A non-owner gets `OK false` back — the
- * authority stays in the relay, this module only builds and publishes.
+ * kind:9002 (edit metadata) is authorized by the relay against the actor's
+ * channel role. kind:9007 (create) currently is NOT — `validate_admin_event`
+ * returns early for it (`side_effects.rs:266`), so any relay member may create
+ * a channel and becomes its owner. Restricting that is a relay-side change.
  */
 
 import { useCallback } from "react";
 
-import { useRelayConnection } from "@/shared/lib/use-relay-connection";
+import type { RelayConnection } from "@/shared/lib/relay-socket";
 import type { ChannelVisibility } from "@/features/chat/channels";
 import { useChannels } from "@/features/chat/use-channels";
 
 const KIND_CREATE_GROUP = 9007;
 const KIND_EDIT_METADATA = 9002;
 
-export function useChannelAdmin() {
-  const { connection, error, setError } = useRelayConnection();
-  const channels = useChannels(connection, setError);
+export function useChannelAdmin(
+  connection: RelayConnection | null,
+  onError: (reason: string) => void,
+) {
+  const channels = useChannels(connection, onError);
 
   const createChannel = useCallback(
     async (input: {
@@ -53,11 +56,5 @@ export function useChannelAdmin() {
     [connection],
   );
 
-  return {
-    channels,
-    error,
-    connected: connection !== null,
-    createChannel,
-    setVisibility,
-  };
+  return { channels, createChannel, setVisibility };
 }
