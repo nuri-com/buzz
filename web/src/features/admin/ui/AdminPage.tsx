@@ -1,9 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { Hash, LoaderCircle, Lock, Unlock } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import type { ChannelVisibility } from "@/features/chat/channels";
+import { currentSignerPubkey } from "@/shared/lib/nostr-signer";
+import { toNpub } from "@/shared/lib/pubkey";
 import { useRelayConnection } from "@/shared/lib/use-relay-connection";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -12,6 +14,11 @@ import { MembersSection } from "./MembersSection";
 
 export function AdminPage() {
   const { connection, error, setError } = useRelayConnection();
+  const [identity, setIdentity] = useState<string | null>(null);
+
+  useEffect(() => {
+    void currentSignerPubkey().then(setIdentity);
+  }, []);
   const { channels, createChannel, setVisibility } = useChannelAdmin(
     connection,
     setError,
@@ -62,6 +69,30 @@ export function AdminPage() {
         Every change here is a signed Nostr event. The relay decides — if you
         are not an owner it is rejected, and nothing on this page changes that.
       </p>
+
+      {identity ? (
+        <div className="mt-6 grid gap-2 rounded-xl border border-black/10 p-4 dark:border-white/10">
+          <h2 className="font-medium text-black dark:text-white">
+            You are signing as
+          </h2>
+          <Input
+            readOnly
+            value={toNpub(identity)}
+            onFocus={(focusEvent) => focusEvent.target.select()}
+          />
+          <Input
+            readOnly
+            value={identity}
+            onFocus={(focusEvent) => focusEvent.target.select()}
+          />
+          <p className="text-xs text-black/55 dark:text-white/55">
+            This is the key the relay checks for every action on this page — the
+            hex form is what <code>RELAY_OWNER_PUBKEY</code> expects. Your
+            passkey identity is a different key from the one your desktop app
+            uses.
+          </p>
+        </div>
+      ) : null}
 
       <form
         onSubmit={submit}
