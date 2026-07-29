@@ -1,5 +1,67 @@
 # Changelog
 
+## Unreleased — Nuri fork (`feat/nuri-passkey-wallet`)
+
+Nuri support portal at `support.nuri.com`: passkey login now lands in a working
+chat instead of an empty repo browser, plus channel and member administration
+from the browser. Deployed to production on 2026-07-28. Operational runbook:
+[docs/nuri-support-portal.md](docs/nuri-support-portal.md).
+
+Everything below is confined to `web/` — no relay change ships until the relay
+image build path for support.nuri.com is documented.
+
+### Added
+
+- Chat on `/`: live channel list (kind:39000), live message timeline
+  (kind:9/40002), composer. The repo browser moved to `/repos`; both keep the
+  Nuri passkey gate ([`09f4dda2`](https://github.com/nuri-com/buzz/commit/09f4dda2))
+- `shared/lib/relay-socket.ts` — persistent NIP-42 socket with open
+  subscriptions and `OK`-confirmed publishing. The existing `queryEvents` is
+  one-shot and closes at `EOSE`, which a chat cannot use
+  ([`09f4dda2`](https://github.com/nuri-com/buzz/commit/09f4dda2))
+- `/admin`: create channels (kind:9007), toggle open/private (kind:9002)
+  ([`fbf3990b`](https://github.com/nuri-com/buzz/commit/fbf3990b))
+- `/admin`: member list from the relay-signed kind:13534 snapshot, add by
+  pubkey (kind:9030), promote/demote (kind:9032), remove (kind:9031), and
+  invite-link minting via `POST /api/invites`
+  ([`4d5f0580`](https://github.com/nuri-com/buzz/commit/4d5f0580))
+- `/admin` shows the signing identity as npub and hex. The browser signs with
+  the passkey-derived key, which is a different key from the desktop app's —
+  without this there was no way to see which key to authorize
+  ([`dd936037`](https://github.com/nuri-com/buzz/commit/dd936037))
+
+### Fixed
+
+- Connect returned the browser to the origin, dropping the path, so a login
+  started on `/admin` (or any deep link) landed in the chat
+  ([`ef994d46`](https://github.com/nuri-com/buzz/commit/ef994d46))
+- "The document is not focused." — Chrome rejects
+  `navigator.credentials.get()` on an unfocused document, and the gate reached
+  for the passkey the moment the Connect redirect landed
+  ([`323996de`](https://github.com/nuri-com/buzz/commit/323996de))
+- Chat dropped every channel tagged `private`. kind:39000 is stored
+  channel-scoped, so a private channel in the relay's response is one the
+  member belongs to and must see. Only `hidden` (DMs) is filtered now
+  ([`fbf3990b`](https://github.com/nuri-com/buzz/commit/fbf3990b))
+- Member row actions were hidden by the role the kind:13534 snapshot claimed.
+  That snapshot is not republished after an owner rotation, which locked the
+  real owner out of removing the demoted previous owner. Actions are now hidden
+  only for your own row
+  ([`323996de`](https://github.com/nuri-com/buzz/commit/323996de))
+
+### Notes for whoever picks this up
+
+- Open channels are readable **and** writable by any authenticated relay member
+  without joining (`handlers/ingest.rs:518`) — that is why the chat needed no
+  relay change.
+- `BUZZ_REQUIRE_RELAY_MEMBERSHIP=false` in production: the relay is open, any
+  Nostr key can participate, and the passkey is not currently an entry
+  requirement. Left as-is by explicit decision; revisit before real users.
+- kind:9007 (create channel) has no authorization at all
+  (`handlers/side_effects.rs:266`). Relay-side fix, currently blocked.
+- Full issue list with file references in
+  [docs/nuri-support-portal.md](docs/nuri-support-portal.md#known-issues).
+
 ## v0.4.24
 
 - fix(desktop): suppress Windows console flashes and reject WSL bash alias ([#2587](https://github.com/block/buzz/pull/2587)) ([`5afa16157`](https://github.com/block/buzz/commit/5afa16157a63c71f2cd8a80aa7276de28ce1c54c))
