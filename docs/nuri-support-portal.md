@@ -9,45 +9,44 @@ touching anything under `web/` or deploying.
 
 ## Read this first
 
-**Production does not run `main`.** `support.nuri.com` currently serves a build
-of the branch [`feat/nuri-passkey-wallet`](https://github.com/nuri-com/buzz/tree/feat/nuri-passkey-wallet)
-(bundle `index-PQCgW_DB.js`). That branch was cut from `6d1a7264`, *before*
-PR #7 landed on `main`, and it contains work that `main` does not have.
+**`main` is now the source of truth.** As of 2026-07-29 everything is merged
+into it: the passkey login, the chat, `/admin`, and a sync with 142 upstream
+commits from `block/buzz`. There is no longer a branch carrying work that `main`
+lacks.
 
-**There are two independent chat implementations.** They were written in
-parallel without knowing about each other and they occupy the same directory:
+**One thing is still out of step: the deployed bundle.** `support.nuri.com`
+serves what was built before the reconciliation. Redeploy from `main` (see
+[Deploying the web client](#deploying-the-web-client)) and the chat UI changes
+from the plainer timeline to the markdown one — that is expected, not a
+regression.
 
-| | `main` (PR #7, 2026-07-25) | `feat/nuri-passkey-wallet` (2026-07-28) |
-|---|---|---|
-| Files | `features/chat/lib/chat-client.ts`, `chat.ts`, `ui/ChatPage.tsx` | `features/chat/channels.ts`, `use-chat.ts`, `use-channels.ts`, `ui/ChatPage.tsx` |
-| Transport | `queryEvents` + `subscribeEvents` in `shared/lib/nostr-client.ts` | one persistent socket, `shared/lib/relay-socket.ts` |
-| Channel catalog | kind:39002 memberships + kind:39000 metadata, one-shot query | kind:39000 live subscription |
-| Joining | explicit kind:9021 join, plus auto-join heuristic | none — open channels need no join |
-| Markdown | yes (`react-markdown`) | no, plain text |
-| Reconnect | per-subscription | whole socket, 2s backoff |
-| Admin UI | none | `/admin` — channels, members, invites |
+### How the chat got reconciled
 
-**Merging the branch into `main` will conflict on `ui/ChatPage.tsx` and
-`app/routes/*`.** Deciding which chat survives is the first task for whoever
-picks this up — see [Next steps](#next-steps).
+Two chat implementations were written in parallel into the same directory
+without knowing about each other. They were merged on 2026-07-29:
 
-### Parallel work in flight
+| Kept | From | Why |
+|------|------|-----|
+| `features/chat/lib/chat-client.ts`, `chat.ts`, `ui/ChatPage.tsx` | PR #7 | More complete — markdown rendering, explicit kind:9021 join flow — and it went through review |
+| `shared/lib/relay-socket.ts`, `use-relay-connection.ts`, `chat/channels.ts`, `chat/use-channels.ts` | `feat/nuri-passkey-wallet` | `/admin` depends on it; the chat does not |
 
-Several people have been building on this portal at the same time without a
-shared picture. Everything currently open:
+Deleted: the second `use-chat.ts` and its `ChatPage`.
 
-| Where | State | Note |
-|-------|-------|------|
-| `main` | merged | Chat from PR #7, repo browser, passkey login |
-| branch `feat/nuri-passkey-wallet` | **deployed to production**, unmerged | Second chat + `/admin` + fixes |
-| PR [#8](https://github.com/nuri-com/buzz/pull/8) `feat/nuri-space-self-service` | open since 2026-07-25 | Self-service Nuri Spaces |
-| PR [#9](https://github.com/nuri-com/buzz/pull/9) `fix/nuri-chat-focused-unlock` | open since 2026-07-25 | **Same WebAuthn focus fix** as the branch — built twice, independently |
-| PR [#10](https://github.com/nuri-com/buzz/pull/10) `docs/handover` | open | This document |
+**Two transports coexist on purpose.** The chat uses `queryEvents` /
+`subscribeEvents` from `shared/lib/nostr-client.ts`; `/admin` uses the
+persistent socket in `relay-socket.ts`. Collapsing them onto one is worth doing
+and is listed under [Next steps](#next-steps) — it was deliberately not done
+inside the reconciliation, because that would have hidden a UI swap in a merge.
 
-PR #9 and the branch fix the identical bug ("The document is not focused." from
-`navigator.credentials.get()` on an unfocused document). Take one, close the
-other. That two people hit and fixed the same bug in isolation is the clearest
-argument for reconciling all of this before adding anything new.
+### Still open
+
+| PR | Branch | State |
+|----|--------|-------|
+| [#8](https://github.com/nuri-com/buzz/pull/8) | `feat/nuri-space-self-service` | Open since 2026-07-25. ~2,000 lines, adds `features/spaces/` and new routes. Unreviewed here, and it will conflict with the reconciled routes — rebase it on current `main` before merging. |
+| [#9](https://github.com/nuri-com/buzz/pull/9) | `fix/nuri-chat-focused-unlock` | **Superseded** — the same WebAuthn focus fix is now on `main`. Its e2e test in `web/tests/e2e/smoke.spec.ts` is still worth cherry-picking, then close the PR. |
+
+That two people independently hit and fixed the identical focus bug is the
+reason this document exists.
 
 ---
 
@@ -312,22 +311,25 @@ That is why portal administration went through signed Nostr events instead.
 
 In dependency order.
 
-1. **Decide which chat survives** and reconcile the branch with `main`. Nothing
-   else can merge cleanly until this is done. The branch's unique, non-duplicated
-   work is: `/admin` (channels, members, invites), the signing-identity display,
-   the Connect return-path fix, the WebAuthn focus fix, and these docs.
+1. **Redeploy the web bundle from `main`.** The live bundle predates the chat
+   reconciliation. One rsync, no relay restart.
 2. **Confirm the relay deploy path** actually works end to end (see the callout
    above). Three of the fixes below are Rust changes and cannot ship until it is
-   proven.
+   proven — and `main` now carries +11,319 lines of upstream relay change that
+   production has never run.
 3. **Remove the demoted previous owner** `99b4556a…a801` from `/admin`.
 4. **Decide `BUZZ_REQUIRE_RELAY_MEMBERSHIP`** (issue 1).
 5. **Gate kind:9007 on the relay role** (issue 2). Needs 2.
 6. **Republish the membership snapshot after `bootstrap_owner`** (issue 3).
    Needs 2.
-7. **Wire agents into the channels.** Path exists — `buzz-acp` / `buzz-cli` with
+7. **Rebase PR #8 (Nuri Spaces) on current `main`** and review it. It predates
+   both the upstream sync and the chat reconciliation.
+8. **Wire agents into the channels.** Path exists — `buzz-acp` / `buzz-cli` with
    `BUZZ_PRIVATE_KEY`, no passkey needed. Nothing to build, only to configure.
-8. **Decide the reload behaviour** (issue 4).
-9. **Profile names instead of truncated pubkeys** in the timeline (kind:0).
+9. **Collapse the two relay transports** onto `relay-socket.ts` so the chat and
+   `/admin` share one connection instead of two.
+10. **Decide the reload behaviour** (issue 4).
+11. **Profile names instead of truncated pubkeys** in the timeline (kind:0).
 
 ## Deliberately not built
 
