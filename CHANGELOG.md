@@ -1,5 +1,65 @@
 # Changelog
 
+Entries below `v0.4.24` are inherited from upstream [block/buzz](https://github.com/block/buzz).
+Everything under **Nuri fork** is this fork only.
+
+---
+
+## Nuri fork — support portal
+
+Handover document: **[docs/nuri-support-portal.md](docs/nuri-support-portal.md)**.
+
+### 2026-07-28 — chat administration, owner rotation, production fixes
+
+Shipped to `support.nuri.com` on branch
+[`feat/nuri-passkey-wallet`](https://github.com/nuri-com/buzz/tree/feat/nuri-passkey-wallet)
+(bundle `index-PQCgW_DB.js`). **Not merged to `main`** — it conflicts with the
+chat that landed in PR #7, see the handover doc.
+
+Added:
+
+- `/admin` — create channels (kind:9007), toggle open/private (kind:9002),
+  member list from the relay-signed kind:13534 snapshot, add by pubkey
+  (kind:9030), promote/demote (kind:9032), remove (kind:9031), and invite-link
+  minting via `POST /api/invites`. Deliberately *not* hung off the existing
+  admin dashboard, whose only authorization is a `Host` header match — see
+  known issue 5.
+- `/admin` shows the signing identity as npub and hex. The browser signs with
+  the passkey-derived key, a different key from the desktop app's; without this
+  there was no way to see which key to authorize.
+- `shared/lib/relay-socket.ts` — persistent NIP-42 socket with open
+  subscriptions and `OK`-confirmed publishing.
+
+Fixed:
+
+- Connect returned the browser to the origin, dropping the path, so a login
+  started on `/admin` landed in the chat.
+- "The document is not focused." — Chrome rejects `navigator.credentials.get()`
+  on an unfocused document, and the gate reached for the passkey the moment the
+  Connect redirect landed.
+- Member row actions were hidden by the role the kind:13534 snapshot claimed.
+  That snapshot is not republished after an owner rotation, which locked the
+  real owner out of removing the demoted previous owner.
+
+Operations:
+
+- Relay owner rotated to Emin's passkey identity `9eb9d804…1e5c`. The previous
+  owner was auto-demoted to `admin` and still needs removing.
+- README corrected: it claimed the relay runs closed with
+  `BUZZ_REQUIRE_RELAY_MEMBERSHIP=true`. Production runs it `false` — the relay
+  is open and the passkey is not enforced as an entry requirement.
+
+### 2026-07-25 — chat after passkey login
+
+- `feat(web): load chat after Nuri wallet login` ([#7](https://github.com/nuri-com/buzz/pull/7)) — channel catalog with kind:9021 join flow, live message subscription, markdown rendering.
+
+### 2026-07-24 — passkey wallet login
+
+- `feat(web): add Nuri passkey wallet signer`, `feat(web): onboard Nuri Connect wallets`, `feat(relay): register approved Nuri wallets` ([#2](https://github.com/nuri-com/buzz/pull/2)) — passkey → Connect → local wallet derivation → `POST /api/nuri/register`.
+- `ci: upload cross-compiled server binaries`, `ci: export relay deployment artifact` — server build artifacts.
+
+---
+
 ## v0.4.24
 
 - fix(desktop): suppress Windows console flashes and reject WSL bash alias ([#2587](https://github.com/block/buzz/pull/2587)) ([`5afa16157`](https://github.com/block/buzz/commit/5afa16157a63c71f2cd8a80aa7276de28ce1c54c))

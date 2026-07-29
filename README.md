@@ -1,3 +1,35 @@
+> ## 🍯 Nuri fork — current state, 2026-07-28
+>
+> This is Nuri's fork of [block/buzz](https://github.com/block/buzz). It runs
+> the public support portal at **[support.nuri.com](https://support.nuri.com)**:
+> sign in with a Nuri passkey, land in the chat, ask a question.
+>
+> **➡️ [`docs/nuri-support-portal.md`](docs/nuri-support-portal.md) is the
+> handover document. Start there.** It has the deploy commands, the server
+> paths, the authorization model, the ranked issue list, and the next steps in
+> dependency order.
+>
+> **Three things to know before you touch anything:**
+>
+> 1. **Production runs the branch, not `main`.** `support.nuri.com` serves a
+>    build of [`feat/nuri-passkey-wallet`](https://github.com/nuri-com/buzz/tree/feat/nuri-passkey-wallet),
+>    which has an `/admin` UI and two bug fixes that `main` does not.
+> 2. **There are two parallel chat implementations** — one on `main` (PR #7),
+>    one on that branch — in the same directory. Merging conflicts. Deciding
+>    which survives is the first task.
+> 3. **The relay is open.** `BUZZ_REQUIRE_RELAY_MEMBERSHIP=false` in
+>    production: any Nostr key can read and post, the passkey is not enforced as
+>    an entry requirement. Deliberate for now, revisit before real users.
+>
+> Three pull requests are open and overlapping — two of them fix the same bug
+> independently. Reconcile them before adding anything new; the table is in the
+> handover doc.
+>
+> Everything else — including what is deliberately *not* built — is in the
+> handover doc and [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 <h1 align="center">Buzz 🐝</h1>
 
 <p align="center">
