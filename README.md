@@ -21,6 +21,10 @@
 >    production: any Nostr key can read and post, the passkey is not enforced as
 >    an entry requirement. Deliberate for now, revisit before real users.
 >
+> Three pull requests are open and overlapping — two of them fix the same bug
+> independently. Reconcile them before adding anything new; the table is in the
+> handover doc.
+>
 > Everything else — including what is deliberately *not* built — is in the
 > handover doc and [CHANGELOG.md](CHANGELOG.md).
 

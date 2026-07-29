@@ -31,6 +31,24 @@ parallel without knowing about each other and they occupy the same directory:
 `app/routes/*`.** Deciding which chat survives is the first task for whoever
 picks this up — see [Next steps](#next-steps).
 
+### Parallel work in flight
+
+Several people have been building on this portal at the same time without a
+shared picture. Everything currently open:
+
+| Where | State | Note |
+|-------|-------|------|
+| `main` | merged | Chat from PR #7, repo browser, passkey login |
+| branch `feat/nuri-passkey-wallet` | **deployed to production**, unmerged | Second chat + `/admin` + fixes |
+| PR [#8](https://github.com/nuri-com/buzz/pull/8) `feat/nuri-space-self-service` | open since 2026-07-25 | Self-service Nuri Spaces |
+| PR [#9](https://github.com/nuri-com/buzz/pull/9) `fix/nuri-chat-focused-unlock` | open since 2026-07-25 | **Same WebAuthn focus fix** as the branch — built twice, independently |
+| PR [#10](https://github.com/nuri-com/buzz/pull/10) `docs/handover` | open | This document |
+
+PR #9 and the branch fix the identical bug ("The document is not focused." from
+`navigator.credentials.get()` on an unfocused document). Take one, close the
+other. That two people hit and fixed the same bug in isolation is the clearest
+argument for reconciling all of this before adding anything new.
+
 ---
 
 ## What the portal is
