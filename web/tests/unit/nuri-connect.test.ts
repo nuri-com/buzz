@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  connectReturnUrl,
   matchesConnectReturn,
   validApprovalUrl,
   validSessionId,
@@ -55,4 +56,26 @@ test("accepts only exact Connect session ids and approval URLs", () => {
   assert.equal(matchesConnectReturn(pending, pending.returnNonce), true);
   assert.equal(matchesConnectReturn(pending, "attacker-nonce"), false);
   assert.equal(matchesConnectReturn(null, pending.returnNonce), false);
+});
+
+test("returns to the page the login started on, not the root", () => {
+  assert.equal(
+    connectReturnUrl("https://support.nuri.com", "/admin", "nonce-1"),
+    "https://support.nuri.com/admin?nuri_connect=nonce-1",
+  );
+  assert.equal(
+    connectReturnUrl("https://support.nuri.com", "/", "nonce-1"),
+    "https://support.nuri.com/?nuri_connect=nonce-1",
+  );
+});
+
+test("drops a stale nuri_connect and hash instead of carrying it along", () => {
+  assert.equal(
+    connectReturnUrl(
+      "https://support.nuri.com",
+      "/admin?nuri_connect=stale#section",
+      "fresh",
+    ),
+    "https://support.nuri.com/admin?nuri_connect=fresh",
+  );
 });

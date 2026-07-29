@@ -35,6 +35,25 @@ type ConnectPollResult =
       session_id: string;
     };
 
+/**
+ * Where Connect sends the browser back.
+ *
+ * Must keep the current path: returning to the origin dropped every deep link
+ * (a login started on /admin landed in the chat). Query and hash are dropped
+ * so a stale `nuri_connect` value cannot ride along into the new flow.
+ */
+export function connectReturnUrl(
+  origin: string,
+  pathname: string,
+  returnNonce: string,
+): string {
+  const url = new URL(pathname, origin);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("nuri_connect", returnNonce);
+  return url.toString();
+}
+
 export function validSessionId(value: string): boolean {
   return /^[0-9a-f]{64}$/i.test(value);
 }
@@ -83,11 +102,14 @@ export async function startConnectFlow(
   flow: ConnectFlow,
 ): Promise<ConnectStartResult> {
   const returnNonce = crypto.randomUUID();
-  const callback = new URL(window.location.origin);
-  callback.searchParams.set("nuri_connect", returnNonce);
+  const callback = connectReturnUrl(
+    window.location.origin,
+    window.location.pathname,
+    returnNonce,
+  );
   const result = await connectRequest<ConnectStartResult>(
     endpoint(flow, "start"),
-    { return_url: callback.toString() },
+    { return_url: callback },
   );
   if (
     result.status !== "pending" ||
