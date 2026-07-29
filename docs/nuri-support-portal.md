@@ -1,34 +1,77 @@
 # Nuri Support Portal — `support.nuri.com`
 
-Operational runbook for the Nuri fork's public support portal: what it is, how
-it is deployed, how to administer it, and what is still broken.
+Handover document for the Nuri fork's public support portal. Read this before
+touching anything under `web/` or deploying.
 
 **Last verified: 2026-07-28.**
 
 ---
 
-## What it is
+## Read this first
 
-A public support chat. Anyone opens `https://support.nuri.com`, signs in with a
-Nuri passkey, and lands directly in the chat to ask questions. The longer-term
-goal is to run AI agents (local and VPS-hosted) in the same channels, and to
-have both open and closed channels in one place.
+**Production does not run `main`.** `support.nuri.com` currently serves a build
+of the branch [`feat/nuri-passkey-wallet`](https://github.com/nuri-com/buzz/tree/feat/nuri-passkey-wallet)
+(bundle `index-PQCgW_DB.js`). That branch was cut from `6d1a7264`, *before*
+PR #7 landed on `main`, and it contains work that `main` does not have.
 
-Three routes, all behind the same passkey gate:
+**There are two independent chat implementations.** They were written in
+parallel without knowing about each other and they occupy the same directory:
 
-| Route | What it serves |
-|-------|----------------|
-| `/` | Chat — channel list, live timeline, composer |
-| `/admin` | Channel + member administration |
-| `/repos` | Git repository browser (the original web client) |
+| | `main` (PR #7, 2026-07-25) | `feat/nuri-passkey-wallet` (2026-07-28) |
+|---|---|---|
+| Files | `features/chat/lib/chat-client.ts`, `chat.ts`, `ui/ChatPage.tsx` | `features/chat/channels.ts`, `use-chat.ts`, `use-channels.ts`, `ui/ChatPage.tsx` |
+| Transport | `queryEvents` + `subscribeEvents` in `shared/lib/nostr-client.ts` | one persistent socket, `shared/lib/relay-socket.ts` |
+| Channel catalog | kind:39002 memberships + kind:39000 metadata, one-shot query | kind:39000 live subscription |
+| Joining | explicit kind:9021 join, plus auto-join heuristic | none — open channels need no join |
+| Markdown | yes (`react-markdown`) | no, plain text |
+| Reconnect | per-subscription | whole socket, 2s backoff |
+| Admin UI | none | `/admin` — channels, members, invites |
 
-`https://support.nuri.com/inbox` still redirects to the separate
-`cockpit.nuri.com` support dashboard. That is a different application and is
-not part of this codebase.
+**Merging the branch into `main` will conflict on `ui/ChatPage.tsx` and
+`app/routes/*`.** Deciding which chat survives is the first task for whoever
+picks this up — see [Next steps](#next-steps).
+
+### Parallel work in flight
+
+Several people have been building on this portal at the same time without a
+shared picture. Everything currently open:
+
+| Where | State | Note |
+|-------|-------|------|
+| `main` | merged | Chat from PR #7, repo browser, passkey login |
+| branch `feat/nuri-passkey-wallet` | **deployed to production**, unmerged | Second chat + `/admin` + fixes |
+| PR [#8](https://github.com/nuri-com/buzz/pull/8) `feat/nuri-space-self-service` | open since 2026-07-25 | Self-service Nuri Spaces |
+| PR [#9](https://github.com/nuri-com/buzz/pull/9) `fix/nuri-chat-focused-unlock` | open since 2026-07-25 | **Same WebAuthn focus fix** as the branch — built twice, independently |
+| PR [#10](https://github.com/nuri-com/buzz/pull/10) `docs/handover` | open | This document |
+
+PR #9 and the branch fix the identical bug ("The document is not focused." from
+`navigator.credentials.get()` on an unfocused document). Take one, close the
+other. That two people hit and fixed the same bug in isolation is the clearest
+argument for reconciling all of this before adding anything new.
 
 ---
 
-## Architecture in one breath
+## What the portal is
+
+A public support chat. Anyone opens `https://support.nuri.com`, signs in with a
+Nuri passkey, and can ask questions immediately. The longer-term goal is AI
+agents (local and VPS-hosted) participating in the same channels, and open plus
+closed channels in one place.
+
+`https://support.nuri.com/inbox` redirects to `cockpit.nuri.com` — a separate
+application, not in this repo.
+
+Routes, all behind the passkey gate:
+
+| Route | `main` | branch |
+|-------|--------|--------|
+| `/` | Chat | Chat |
+| `/repos` | Repo browser | Repo browser |
+| `/admin` | — | Channels + members + invites |
+
+---
+
+## Architecture
 
 ```
 Browser (web/)                       support.nuri.com
@@ -41,31 +84,16 @@ Browser (web/)                       support.nuri.com
   └──────────────────────────────────┴──────────────────────────┘
 ```
 
-The web client talks to the relay the same way every other Buzz client does:
-NIP-42 authenticated WebSocket, `REQ` for reads, `EVENT` for writes. There are
-no portal-specific HTTP endpoints beyond `POST /api/nuri/register`, which
-pre-dates this work.
-
-### Key client modules
-
-| File | Responsibility |
-|------|----------------|
-| `web/src/shared/lib/relay-socket.ts` | Persistent NIP-42 socket: live `subscribe()`, `publish()` with `OK` confirmation |
-| `web/src/shared/lib/use-relay-connection.ts` | One socket per mounted page, auto-reconnect after 2s |
-| `web/src/features/chat/` | Channel discovery (kind:39000), live messages (kind:9/40002), send |
-| `web/src/features/admin/` | Channel create/visibility, member roles, invite links |
-| `web/src/features/nuri-wallet/` | Passkey → Connect → wallet derivation → relay registration |
-
-`shared/lib/nostr-client.ts` (`queryEvents`) is the older one-shot helper — it
-closes at `EOSE` and is still used by the repo browser. Chat and admin use
-`relay-socket.ts` instead, because a chat needs the subscription left open.
+The client talks to the relay the way every Buzz client does: NIP-42
+authenticated WebSocket, `REQ` to read, `EVENT` to write. The only
+portal-specific HTTP endpoint is `POST /api/nuri/register`.
 
 ---
 
 ## Deploying the web client
 
-The relay runs as a Docker container; the web bundle is **static files served
-by Caddy**, so a frontend deploy needs no relay restart.
+The web bundle is **static files served by Caddy** — a frontend deploy needs no
+relay restart.
 
 ```bash
 cd web
@@ -80,13 +108,13 @@ ssh nuri-support 'set -e
 curl -s https://support.nuri.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js'
 ```
 
-The last line prints the live bundle hash — compare it with the hash `pnpm
-build` reported. Rollback is `mv /opt/buzz-web-backup-prev /opt/buzz-web`.
+The last line prints the live bundle hash — compare it to what `pnpm build`
+reported. Rollback: `mv /opt/buzz-web-backup-prev /opt/buzz-web`.
 
-**Route changes need a route-tree regeneration.** `web/src/app/routeTree.gen.ts`
-is produced by the TanStack Vite plugin, and `pnpm build` runs `tsc` *before*
-Vite — so adding a route makes `pnpm typecheck` fail against the stale tree.
-Run `pnpm exec vite build` once to regenerate, then the normal gate passes.
+**Adding a route needs a route-tree regeneration.** `web/src/app/routeTree.gen.ts`
+is generated by the TanStack Vite plugin, but `pnpm build` runs `tsc` *first*,
+so `pnpm typecheck` fails against the stale tree. Run `pnpm exec vite build`
+once to regenerate, then the normal gate passes.
 
 ### Server layout
 
@@ -95,27 +123,39 @@ Run `pnpm exec vite build` once to regenerate, then the normal gate passes.
 | `/opt/buzz-web` | Live web bundle (Caddy document root) |
 | `/opt/buzz-web-backup-prev` | Previous bundle, for rollback |
 | `/etc/caddy/Caddyfile` | TLS, WS upgrade, `/api/*` proxy, `/inbox` redirect |
-| `/opt/buzz/deploy/compose/` | Relay compose project (`compose.yml`, `.env`, `run.sh`) |
-| `/opt/buzz/deploy/compose/.env` | Relay configuration — see below |
+| `/opt/buzz/deploy/compose/` | Relay compose project |
+| `/opt/buzz/deploy/compose/.env` | Relay configuration |
 
-SSH host alias `nuri-support` (`167.233.218.237`). **Authentication requires the
-smartcard to be in the reader**; without it every SSH and rsync call fails with
+SSH alias `nuri-support` (`167.233.218.237`, user `root`). **The smartcard must
+be in the reader** — without it every SSH and rsync call fails with
 `signing failed for ECDSA-SK … device not found`.
 
 ---
 
 ## Deploying the relay
 
-The relay image is **not** built by this repo's CI. `buzz-prod-relay-1` runs
-from a tag that reports as `ghcr.io/block/buzz:main` but contains Nuri-only code
-(`POST /api/nuri/register` responds), so the build path was manual and is
-currently **undocumented and unknown**.
+`buzz-prod-relay-1` runs from a Docker image alongside Postgres, Redis and
+MinIO, all managed by `/opt/buzz/deploy/compose`.
 
-> **Open item.** Any change under `crates/` cannot be shipped to
-> support.nuri.com until this is resolved. Everything delivered in this session
-> was deliberately confined to `web/` for that reason.
+CI produces the server artifacts:
 
-Restarting with changed configuration:
+- `.github/workflows/ci.yml` uploads `server-binaries-<target>` (includes
+  `buzz-relay`) on every non-PR run, 14-day retention.
+- `.github/workflows/docker.yml` builds and pushes the relay image. The image
+  name is `vars.GHCR_IMAGE` when the repository variable is set, otherwise
+  `ghcr.io/block/buzz`.
+- `.github/workflows/server-deploy-artifact.yml` (`workflow_dispatch`) pulls
+  `$IMAGE:main` and extracts `/usr/local/bin/buzz-relay` as a downloadable
+  artifact with a sha256.
+
+> **Verify before relying on this.** The running container reports
+> `ghcr.io/block/buzz:main`, yet it serves `POST /api/nuri/register`, which only
+> exists in this fork. Either `GHCR_IMAGE` is set to a Nuri image and the tag
+> display is misleading, or the binary was swapped in by hand. Confirm which
+> before shipping a Rust change — nobody has done a relay deploy through this
+> path yet.
+
+Restart with changed configuration:
 
 ```bash
 ssh nuri-support 'cd /opt/buzz/deploy/compose \
@@ -131,7 +171,7 @@ Two independent layers. Confusing them costs an afternoon.
 ### 1. Relay membership — who may use the community at all
 
 `relay_members.role` ∈ `owner` | `admin` | `member`, administered by signed
-events. Permission matrix in `crates/buzz-relay/src/handlers/relay_admin.rs`:
+events. Matrix in `crates/buzz-relay/src/handlers/relay_admin.rs`:
 
 | Kind | Operation | Required sender role |
 |------|-----------|----------------------|
@@ -140,15 +180,15 @@ events. Permission matrix in `crates/buzz-relay/src/handlers/relay_admin.rs`:
 | 9032 | Change role | **owner only**, and never to `owner` |
 
 Nobody can remove themselves or change their own role. The `owner` role cannot
-be granted, moved, or removed by any event — **ownership changes only through
-`RELAY_OWNER_PUBKEY` in `.env` plus a relay restart**, so a compromised admin
-cannot lock the owner out. `bootstrap_owner` runs on every startup: it upserts
-the configured pubkey as `owner` and demotes any other owner to `admin`, in one
+be granted, moved or removed by any event — **ownership changes only through
+`RELAY_OWNER_PUBKEY` in `.env` plus a restart**, so a compromised admin cannot
+lock the owner out. `bootstrap_owner` runs on every startup: it upserts the
+configured pubkey as `owner` and demotes any other owner to `admin`, in one
 transaction (`crates/buzz-db/src/relay_members.rs:320`).
 
 Invite links (`POST /api/invites`, owner/admin only) grant `member`, never
-`admin` — the role is hardcoded in `crates/buzz-relay/src/invite_token.rs:135`.
-Promotion is a separate kind:9032 afterwards.
+`admin` — hardcoded in `crates/buzz-relay/src/invite_token.rs:135`. Promotion is
+a separate kind:9032.
 
 ### 2. Channel membership — who may read and post where
 
@@ -158,35 +198,33 @@ Promotion is a separate kind:9032 afterwards.
   authenticated relay member without joining** —
   `check_channel_membership` (`crates/buzz-relay/src/handlers/ingest.rs:518`)
   and `get_accessible_channel_ids` (`crates/buzz-db/src/channel.rs:638`). This
-  is what makes the "log in and immediately ask a question" flow work with no
-  relay changes at all.
+  is why a chat needed no relay change at all.
 - Private channels require explicit membership.
-- kind:9002 metadata edits touching `name`/`about`/`archived`/`visibility`/`ttl`
-  require `owner` or `admin` **in that channel**; `topic`/`purpose` allow any
-  member.
+- kind:9002 edits touching `name`/`about`/`archived`/`visibility`/`ttl` require
+  `owner` or `admin` **in that channel**; `topic`/`purpose` allow any member.
 
 ---
 
 ## Administering the portal
 
-Everything is in `/admin`, behind the passkey gate. Every action is a signed
-Nostr event — the relay is the authority, and a rejection surfaces as a toast
-with the relay's own message.
+Only on the branch, at `/admin`, behind the passkey gate. Every action is a
+signed Nostr event; the relay is the authority and a rejection surfaces as a
+toast carrying the relay's own message.
 
 - **You are signing as** — your npub and hex. The browser signs with your
-  *passkey-derived* key, which is a **different key from the one your desktop
-  app holds**. The hex form is what `RELAY_OWNER_PUBKEY` expects.
+  *passkey-derived* key, which is a **different key from the one the desktop app
+  holds**. The hex form is what `RELAY_OWNER_PUBKEY` expects.
 - **Channels** — create (kind:9007), toggle open/private (kind:9002).
-- **Members** — list, add by pubkey (kind:9030), promote/demote (kind:9032),
-  remove (kind:9031), and mint an invite link.
+- **Members** — list, add by pubkey (9030), promote/demote (9032), remove
+  (9031), mint an invite link.
 
-Row actions are hidden only for your own row, never by the role the list
-claims — see the stale-snapshot issue below.
+Row actions are hidden only for your own row, never by the role the list claims
+— see [known issue 3](#3-membership-list-goes-stale-after-an-owner-rotation).
 
 ### Rotating the owner
 
-You need the target's hex pubkey. The friendly way to obtain it, without asking
-anyone to copy 64 characters: have them log in, then read it from the relay log.
+You need the target's hex pubkey. Getting it without asking anyone to copy 64
+characters: have them log in, then read it from the relay log.
 
 ```bash
 ssh nuri-support 'docker logs --since 5m buzz-prod-relay-1 2>&1 \
@@ -194,11 +232,9 @@ ssh nuri-support 'docker logs --since 5m buzz-prod-relay-1 2>&1 \
   | grep -oE "\"timestamp\":\"[^\"]+\"|\"pubkey\":\"[0-9a-f]{64}\"" | paste - -'
 ```
 
-The relay logs every NIP-42 login at INFO (`handlers/auth.rs:277`). One login in
-a narrow window is an unambiguous match. Confirm the npub back to the person
-before acting — the relay is currently open, so strangers authenticate too.
-
-Then:
+Every NIP-42 login is logged at INFO (`handlers/auth.rs:277`). One login in a
+narrow window is an unambiguous match. **Confirm the npub back to the person
+before acting** — the relay is open, so strangers authenticate too.
 
 ```bash
 ssh nuri-support 'cd /opt/buzz/deploy/compose
@@ -208,83 +244,96 @@ ssh nuri-support 'cd /opt/buzz/deploy/compose
 ssh nuri-support 'docker logs --since 2m buzz-prod-relay-1 | grep "owner bootstrapped"'
 ```
 
-The previous owner is demoted to `admin`, not deleted. Remove them afterwards
-from `/admin`.
+The previous owner is demoted to `admin`, not deleted. Remove them afterwards.
+
+Current owner as of 2026-07-28: `9eb9d804…1e5c`
+(`npub1n6uaspx0pkhrltc0d96xsc24re8ty6n6gj2crf9c4hyf8tv7rewqee9v0g`), Emin's
+passkey identity. The previous owner `99b4556a…a801` is demoted to `admin` and
+**still needs removing**. Config backup: `.env.backup-20260728-owner`.
 
 ---
 
 ## Known issues
 
-Ranked by how much they will bite the next person.
+Ranked by how much they will bite.
 
 ### 1. The relay is open — membership is not enforced
 
 `BUZZ_REQUIRE_RELAY_MEMBERSHIP=false` in `.env`. `check_relay_membership`
 returns `OpenRelay` and admits **any Nostr key**
-(`crates/buzz-relay/src/api/mod.rs:132`). The Nuri passkey registration writes a
-`relay_members` row, but that row is never checked for access — so the passkey
-is not actually an entry requirement, and unknown keys do show up in the member
-list (five were observed on 2026-07-28).
+(`crates/buzz-relay/src/api/mod.rs:132`). The passkey registration writes a
+`relay_members` row, but that row is never checked for access — the passkey is
+not currently an entry requirement. Five unknown keys were in the member list on
+2026-07-28.
 
-Flipping it to `true` is one env var plus a restart; `RELAY_OWNER_PUBKEY` and
-`BUZZ_RELAY_PRIVATE_KEY` are both set, so the preconditions hold, and
-`/api/nuri/register` deliberately runs *before* the membership gate so passkey
-signup keeps working. **Left at `false` by explicit decision on 2026-07-28** —
-revisit before real users arrive.
+Flipping to `true` is one env var plus a restart; `RELAY_OWNER_PUBKEY` and
+`BUZZ_RELAY_PRIVATE_KEY` are both set, and `/api/nuri/register` deliberately
+runs *before* the membership gate so passkey signup keeps working. **Left at
+`false` by explicit decision on 2026-07-28** — revisit before real users.
 
 ### 2. Anyone may create channels
 
 kind:9007 has **no authorization**: `validate_admin_event` returns `Ok(())` for
 it before any check (`crates/buzz-relay/src/handlers/side_effects.rs:266`), and
-the creator becomes owner of their channel. That is the right default for an
-invite-gated team workspace and the wrong one for a public portal — an open
-channel created by a stranger appears in everyone's list.
-
-Fix is relay-side: gate kind:9007 on the relay role. Blocked on the relay build
-path (see above). Note that `/admin` is not the exposure — any Nostr client can
-send kind:9007 — but it does lower the bar to two clicks.
+the creator becomes owner of their channel. Right default for an invite-gated
+team workspace, wrong one for a public portal — an open channel created by a
+stranger appears in everyone's list. Fix is relay-side: gate kind:9007 on the
+relay role. Note `/admin` is not the exposure; any Nostr client can send
+kind:9007.
 
 ### 3. Membership list goes stale after an owner rotation
 
 `/admin` renders the relay-signed kind:13534 snapshot. `bootstrap_owner` rotates
-roles in a plain SQL transaction at startup and **never republishes that
-snapshot**, so the list keeps showing the previous owner until some kind:9030 or
-9031 triggers a republish.
-
-Worked around in the client (row actions are hidden by identity, not by claimed
-role, so you are never locked out of removing a demoted owner). The real fix is
-one call to `publish_nip43_membership_list` after `bootstrap_owner` in
-`crates/buzz-relay/src/main.rs:294` — again blocked on the relay build path.
+roles in a plain SQL transaction at startup and **never republishes it**, so the
+list keeps showing the previous owner until a kind:9030/9031 triggers a
+republish. Worked around client-side (row actions keyed on identity, not on
+claimed role). Real fix: one `publish_nip43_membership_list` call after
+`bootstrap_owner` in `crates/buzz-relay/src/main.rs:294`.
 
 ### 4. Reload forces a new Connect round trip
 
-`nostr-signer.ts` locks the key on `pagehide`, so every reload or tab restore
-sends the user back through connect.nuri.com. Deliberate — no private key
-touches any storage — but rough for a support chat where people switch tabs.
-The candidate fix is holding *only* the Nostr key in `sessionStorage`, which is
-a real security trade-off and needs a decision, not a patch.
+`nostr-signer.ts` locks the key on `pagehide`, so every reload sends the user
+back through connect.nuri.com. Deliberate — no private key touches storage — but
+rough for a support chat where people switch tabs. Candidate fix is holding
+*only* the Nostr key in `sessionStorage`, a real security trade-off that needs a
+decision rather than a patch.
 
 ### 5. The admin dashboard's own auth is a host-header check
 
 Unrelated to `/admin`, but worth knowing: the separate read-only dashboard at
 `/api/admin/v1` authorizes purely on the `Host` header matching
 `BUZZ_ADMIN_HOST` (`crates/buzz-relay/src/api/admin/auth.rs:13`). No login, no
-signature. Acceptable for a read-only reports board; **do not hang write
-operations off it.** That is why portal administration went through signed
-Nostr events instead.
+signature. Fine for a read-only reports board; **do not hang writes off it.**
+That is why portal administration went through signed Nostr events instead.
 
 ---
 
-## What is deliberately not built
+## Next steps
 
-Not bugs — scope decisions, listed so nobody re-discovers them as gaps.
+In dependency order.
 
-- Profile names in the timeline (pubkeys are truncated; kind:0 lookup missing)
-- Threads, reactions, edits, unread state, typing indicators
-- Channel membership management for *private* channels from the web
-- Agents in channels — the path exists (`buzz-acp` / `buzz-cli` with
-  `BUZZ_PRIVATE_KEY`, no passkey needed), it simply has not been wired up yet
-- Any Rust change at all, because the relay build path is unknown
+1. **Decide which chat survives** and reconcile the branch with `main`. Nothing
+   else can merge cleanly until this is done. The branch's unique, non-duplicated
+   work is: `/admin` (channels, members, invites), the signing-identity display,
+   the Connect return-path fix, the WebAuthn focus fix, and these docs.
+2. **Confirm the relay deploy path** actually works end to end (see the callout
+   above). Three of the fixes below are Rust changes and cannot ship until it is
+   proven.
+3. **Remove the demoted previous owner** `99b4556a…a801` from `/admin`.
+4. **Decide `BUZZ_REQUIRE_RELAY_MEMBERSHIP`** (issue 1).
+5. **Gate kind:9007 on the relay role** (issue 2). Needs 2.
+6. **Republish the membership snapshot after `bootstrap_owner`** (issue 3).
+   Needs 2.
+7. **Wire agents into the channels.** Path exists — `buzz-acp` / `buzz-cli` with
+   `BUZZ_PRIVATE_KEY`, no passkey needed. Nothing to build, only to configure.
+8. **Decide the reload behaviour** (issue 4).
+9. **Profile names instead of truncated pubkeys** in the timeline (kind:0).
+
+## Deliberately not built
+
+Not bugs — scope decisions, listed so they are not re-discovered as gaps:
+threads, reactions, edits, unread state, typing indicators, and private-channel
+membership management from the web.
 
 ---
 
@@ -298,7 +347,7 @@ pnpm test:unit    # node:test, no infrastructure needed
 pnpm build
 ```
 
-Unit tests cover the pure logic that is easy to get silently wrong: channel
-snapshot merging, membership snapshot parsing, the Connect return URL, and
-wallet derivation. Everything socket- or React-shaped is currently unverified by
-tests and was checked by hand against production.
+Unit tests cover the pure logic that is easy to get silently wrong: channel and
+membership snapshot projection, the Connect return URL, wallet derivation.
+Everything socket- or React-shaped is unverified by tests and was checked by
+hand against production.

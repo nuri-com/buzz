@@ -103,11 +103,14 @@ automatisch auf `admin` heruntergestuft — Backup der alten Relay-Config unter
    `323996de` da. Das löst zugleich einen frischen kind:13534-Snapshot aus und
    räumt die falsche Anzeige aus Punkt 10 auf. War beim Session-Ende noch nicht
    bestätigt.
-2. **Relay-Build-Pfad klären.** `buzz-prod-relay-1` läuft als
-   `ghcr.io/block/buzz:main`, enthält aber Nuri-Code — der Build war manuell und
-   ist undokumentiert. **Solange das offen ist, kann keine einzige
-   Rust-Änderung nach prod.** Deshalb blieb diese Session komplett in `web/`.
-   Das ist der wichtigste nächste Schritt, er blockiert drei andere.
+2. **Relay-Deploy-Pfad bestätigen.** *Korrektur zu einer früheren Fassung
+   dieses Logs: der Build-Pfad ist nicht unbekannt.* `ci.yml` lädt
+   `buzz-relay`-Binaries als Artefakt hoch, `docker.yml` published ein
+   GHCR-Image über `vars.GHCR_IMAGE`, und `server-deploy-artifact.yml`
+   extrahiert die Relay-Binary aus dem Image. Offen bleibt nur, ob der
+   laufende Container tatsächlich daraus stammt — er meldet
+   `ghcr.io/block/buzz:main`, serviert aber Nuri-Code. Vor der ersten
+   Rust-Änderung verifizieren. Blockiert Schritt 4 und 5.
 3. **`BUZZ_REQUIRE_RELAY_MEMBERSHIP=true`** entscheiden (Punkt 8). Ein Env-Flag
    plus Neustart, Voraussetzungen sind erfüllt. Emin hat am 2026-07-28
    ausdrücklich "offen lassen" gewählt — vor echten Nutzern neu bewerten.

@@ -1,3 +1,35 @@
+> ## 🍯 Nuri fork — current state, 2026-07-28
+>
+> This is Nuri's fork of [block/buzz](https://github.com/block/buzz). It runs
+> the public support portal at **[support.nuri.com](https://support.nuri.com)**:
+> sign in with a Nuri passkey, land in the chat, ask a question.
+>
+> **➡️ [`docs/nuri-support-portal.md`](docs/nuri-support-portal.md) is the
+> handover document. Start there.** It has the deploy commands, the server
+> paths, the authorization model, the ranked issue list, and the next steps in
+> dependency order.
+>
+> **Three things to know before you touch anything:**
+>
+> 1. **Production runs the branch, not `main`.** `support.nuri.com` serves a
+>    build of [`feat/nuri-passkey-wallet`](https://github.com/nuri-com/buzz/tree/feat/nuri-passkey-wallet),
+>    which has an `/admin` UI and two bug fixes that `main` does not.
+> 2. **There are two parallel chat implementations** — one on `main` (PR #7),
+>    one on that branch — in the same directory. Merging conflicts. Deciding
+>    which survives is the first task.
+> 3. **The relay is open.** `BUZZ_REQUIRE_RELAY_MEMBERSHIP=false` in
+>    production: any Nostr key can read and post, the passkey is not enforced as
+>    an entry requirement. Deliberate for now, revisit before real users.
+>
+> Three pull requests are open and overlapping — two of them fix the same bug
+> independently. Reconcile them before adding anything new; the table is in the
+> handover doc.
+>
+> Everything else — including what is deliberately *not* built — is in the
+> handover doc and [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 <h1 align="center">Buzz 🐝</h1>
 
 <p align="center">
@@ -156,55 +188,20 @@ For a split-terminal workflow (relay logs separate from Vite output), use `just 
 
 For agents, set `BUZZ_PRIVATE_KEY` and use [`buzz-cli`](crates/buzz-cli) — JSON in, JSON out, designed for LLM tool calls.
 
-### Nuri support portal — `support.nuri.com`
+### Nuri web deployment — 2026-07-24
 
-The Nuri fork runs a public support chat at `https://support.nuri.com`. Anyone
-signs in with a Nuri passkey and lands directly in the chat. The existing
-support dashboard stays reachable at `https://support.nuri.com/inbox`, which
-redirects to `cockpit.nuri.com`.
-
-| Route | What it serves |
-|-------|----------------|
-| `/` | Chat — channel list, live timeline, composer |
-| `/admin` | Channel + member administration |
-| `/repos` | Git repository browser |
-
-**Deployment, administration, and the current issue list live in
-[docs/nuri-support-portal.md](docs/nuri-support-portal.md).** Read that before
-touching the portal — it is the handover document.
-
-#### Passkey login
+The Nuri fork runs the Buzz web client at `https://support.nuri.com` and keeps the existing support dashboard at `https://support.nuri.com/inbox`.
 
 A user starts with **Create Nuri Wallet** or **Use existing wallet**. Buzz hands the browser to `connect.nuri.com`, which creates or opens the existing `nuri-expo-wallet-v1` passkey wallet. After Connect returns, Buzz asks for the same `nuri.com` passkey once more and derives the wallet locally. The complete public wallet tuple must match the approved Connect result before Buzz unlocks.
 
-The same wallet contains separate Bitcoin, Arkade, Ethereum, and Nostr keys. Buzz keeps only a copy of the Nostr private key in memory for the current tab. Bitcoin and Ethereum private keys, PRF output, and temporary derivation keys are zeroized immediately. No private key is stored in cookies, local storage, session storage, IndexedDB, Postgres, or the relay. The key is discarded on `pagehide`, so a reload means another Connect round trip.
+The same wallet contains separate Bitcoin, Arkade, Ethereum, and Nostr keys. Buzz keeps only a copy of the Nostr private key in memory for the current tab. Bitcoin and Ethereum private keys, PRF output, and temporary derivation keys are zeroized immediately. No private key is stored in cookies, local storage, session storage, IndexedDB, Postgres, or the relay.
 
-`POST /api/nuri/register` requires both:
+The relay remains closed with `BUZZ_REQUIRE_RELAY_MEMBERSHIP=true`. `POST /api/nuri/register` requires both:
 
 1. an approved Connect wallet session, and
 2. a payload-bound NIP-98 signature from the exact Nostr pubkey in that wallet.
 
 Only then is the pubkey added as a relay member. Arkade and Lightning operations continue through Connect instead of exposing wallet keys to Buzz.
-
-> **The production relay currently runs with `BUZZ_REQUIRE_RELAY_MEMBERSHIP=false`.**
-> An earlier revision of this README claimed the opposite. The relay is open:
-> any Nostr key can read and post in open channels, and the passkey
-> registration — while it does create the membership row — is not enforced as
-> an entry requirement. This was left in place by explicit decision on
-> 2026-07-28 and should be revisited before real users arrive. See
-> [Known issues](docs/nuri-support-portal.md#known-issues).
-
-#### Why the chat needed no relay change
-
-Open channels (`visibility = 'open'`) are readable **and** writable by any
-authenticated relay member without an explicit join —
-`check_channel_membership` in `crates/buzz-relay/src/handlers/ingest.rs`. A
-freshly registered passkey wallet can therefore ask a question immediately.
-
-Channel and member administration works the same way: `/admin` publishes plain
-signed Nostr events (kinds 9007/9002 for channels, 9030/9031/9032 for
-membership) and the relay authorizes them. No portal-specific HTTP endpoints,
-no second auth path.
 
 ---
 
