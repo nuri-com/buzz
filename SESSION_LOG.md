@@ -76,21 +76,33 @@ Operativer Runbook mit allen Dateiverweisen:
 
 ### State
 
-Sieben Commits auf `feat/nuri-passkey-wallet`, alle deployed:
+**Alles ist auf `main`.** Kein Branch trägt mehr Arbeit, die `main` fehlt.
+Endstand siehe [docs/nuri-support-portal.md](docs/nuri-support-portal.md) — das
+ist ab hier das führende Dokument, dieses Log ist nur noch der Verlauf.
 
-| Commit | Inhalt |
-|--------|--------|
-| `09f4dda2` | Chat auf `/`, Repo-Browser auf `/repos`, `relay-socket.ts` |
-| `fbf3990b` | `/admin` Channel-Verwaltung, private-Filter-Bugfix |
-| `4d5f0580` | Mitglieder + Invite-Links in `/admin` |
-| `dd936037` | Signatur-Identität auf `/admin` sichtbar |
-| `ef994d46` | Connect-Rücksprung behält den Pfad |
-| `323996de` | WebAuthn-Fokus + veralteter Snapshot |
-| `cfd4d582` | Session-Log |
+| PR | Inhalt |
+|----|--------|
+| [#10](https://github.com/nuri-com/buzz/pull/10) | Handover-Doku, README-Banner, Changelog-Struktur |
+| [#11](https://github.com/nuri-com/buzz/pull/11) | Sync mit 142 Upstream-Commits aus `block/buzz` |
+| [#12](https://github.com/nuri-com/buzz/pull/12) | Chat-Doppelung aufgelöst, `/admin` + Fixes nach `main` |
 
-`pnpm check`, `typecheck`, `test:unit` (12 Tests) und `build` grün. Live auf
-support.nuri.com als `index-PQCgW_DB.js`. Backup des vorherigen Bundles unter
+Die sieben Einzelcommits der Portal-Arbeit (`09f4dda2` Chat + `relay-socket.ts`,
+`fbf3990b` Channel-Admin, `4d5f0580` Mitglieder + Invites, `dd936037`
+Signatur-Identität, `ef994d46` Connect-Rücksprung, `323996de` WebAuthn-Fokus +
+veralteter Snapshot, `cfd4d582` dieses Log) sind über #12 eingegangen.
+
+16 Unit-Tests grün — beide Chat-Suiten laufen zusammen. Biome, Typecheck, Build
+sauber, `cargo check -p buzz-relay` sauber. Live auf support.nuri.com als
+`index-BYFI9Ptf.js`, gebaut aus `main`. Backup des vorherigen Bundles unter
 `/opt/buzz-web-backup-prev`, Rollback ist ein `mv`.
+
+**Nachträgliche Korrektur zu einer früheren Fassung dieses Logs:** die
+Chat-Implementierung aus `09f4dda2` hat den Merge *nicht* überlebt. Sie war eine
+Dublette — PR #7 hatte am 2026-07-25 bereits einen Chat auf `main` gelandet, und
+der Branch war von einem älteren Commit abgezweigt. Behalten wurde die
+reviewte Variante aus #7 (Markdown, kind:9021-Join-Flow), dazu die Infrastruktur
+aus dem Branch (`relay-socket.ts`, `use-relay-connection.ts`, Channel-Hooks),
+weil `/admin` daran hängt.
 
 Owner ist jetzt `9eb9d804…1e5c` (`npub1n6uaspx…ee9v0g`), Emins
 Passkey-Identität. Der vorherige Owner `99b4556a…a801` wurde beim Neustart
@@ -99,10 +111,13 @@ automatisch auf `admin` heruntergestuft — Backup der alten Relay-Config unter
 
 ### Next steps
 
-1. **Alt-Owner `99b4556a…a801` in `/admin` entfernen.** Der Button ist seit
-   `323996de` da. Das löst zugleich einen frischen kind:13534-Snapshot aus und
-   räumt die falsche Anzeige aus Punkt 10 auf. War beim Session-Ende noch nicht
-   bestätigt.
+> Die gepflegte, priorisierte Liste steht in
+> [docs/nuri-support-portal.md](docs/nuri-support-portal.md#next-steps). Was hier
+> folgt, ist der Stand bei Session-Ende.
+
+1. **Alt-Owner `99b4556a…a801` in `/admin` entfernen.** Der Button ist da. Das
+   löst zugleich einen frischen kind:13534-Snapshot aus und räumt die falsche
+   Anzeige aus Punkt 10 auf. War beim Session-Ende noch nicht bestätigt.
 2. **Relay-Deploy-Pfad bestätigen.** *Korrektur zu einer früheren Fassung
    dieses Logs: der Build-Pfad ist nicht unbekannt.* `ci.yml` lädt
    `buzz-relay`-Binaries als Artefakt hoch, `docker.yml` published ein
