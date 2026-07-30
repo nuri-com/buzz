@@ -1,4 +1,4 @@
-> ## 🍯 Nuri fork — current state, 2026-07-28
+> ## 🍯 Nuri fork — current state, 2026-07-29
 >
 > This is Nuri's fork of [block/buzz](https://github.com/block/buzz). It runs
 > the public support portal at **[support.nuri.com](https://support.nuri.com)**:
@@ -9,21 +9,25 @@
 > paths, the authorization model, the ranked issue list, and the next steps in
 > dependency order.
 >
+> **State:** `main` is the source of truth. The passkey login, the chat, the
+> `/admin` UI and a sync with 142 upstream commits are all merged. There is no
+> branch carrying work `main` lacks.
+>
 > **Three things to know before you touch anything:**
 >
-> 1. **Production runs the branch, not `main`.** `support.nuri.com` serves a
->    build of [`feat/nuri-passkey-wallet`](https://github.com/nuri-com/buzz/tree/feat/nuri-passkey-wallet),
->    which has an `/admin` UI and two bug fixes that `main` does not.
-> 2. **There are two parallel chat implementations** — one on `main` (PR #7),
->    one on that branch — in the same directory. Merging conflicts. Deciding
->    which survives is the first task.
+> 1. **The deployed bundle predates the last merge.** Redeploy from `main` —
+>    one rsync, no relay restart. The chat UI changes to the markdown one; that
+>    is expected.
+> 2. **The relay has never been deployed from this repo.** `main` now carries
+>    +11,319 lines of upstream relay change that production has never run, and
+>    the deploy path is documented but unverified. Confirm it before shipping
+>    any Rust change.
 > 3. **The relay is open.** `BUZZ_REQUIRE_RELAY_MEMBERSHIP=false` in
 >    production: any Nostr key can read and post, the passkey is not enforced as
 >    an entry requirement. Deliberate for now, revisit before real users.
 >
-> Three pull requests are open and overlapping — two of them fix the same bug
-> independently. Reconcile them before adding anything new; the table is in the
-> handover doc.
+> One pull request is still open — [#8](https://github.com/nuri-com/buzz/pull/8),
+> Nuri Spaces — and it predates both merges, so rebase it before review.
 >
 > Everything else — including what is deliberately *not* built — is in the
 > handover doc and [CHANGELOG.md](CHANGELOG.md).

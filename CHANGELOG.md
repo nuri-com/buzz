@@ -9,6 +9,30 @@ Everything under **Nuri fork** is this fork only.
 
 Handover document: **[docs/nuri-support-portal.md](docs/nuri-support-portal.md)**.
 
+### 2026-07-29 — everything merged into `main`
+
+`main` becomes the source of truth. No branch carries work it lacks.
+
+- **Reconciled the two chat implementations** ([#12](https://github.com/nuri-com/buzz/pull/12)).
+  They had been written in parallel into the same directory without knowing
+  about each other. Kept PR #7's `ChatPage` — markdown rendering, explicit
+  kind:9021 join flow, and it went through review. Kept the branch's
+  `relay-socket.ts`, `use-relay-connection.ts` and channel hooks, because
+  `/admin` depends on them and the chat does not. Deleted the duplicate
+  `use-chat.ts`.
+  The two transports coexist deliberately; collapsing them is a follow-up, not
+  a merge-conflict decision.
+- **Synced 142 commits from `block/buzz`** ([#11](https://github.com/nuri-com/buzz/pull/11)).
+  Two mechanical conflicts. Verified individually that the portal's core
+  assumption survived: `check_channel_membership` and
+  `get_accessible_channel_ids` are byte-identical upstream, `api/mod.rs` and
+  `api/nuri.rs` untouched, the 9030/9031/9032 matrix unchanged. Upstream's
+  invite rework stays backward compatible.
+- **Landed the handover documentation** ([#10](https://github.com/nuri-com/buzz/pull/10)).
+
+Not deployed: the live bundle still predates the reconciliation, and the relay
+has never been deployed from this repo.
+
 ### 2026-07-28 — chat administration, owner rotation, production fixes
 
 Shipped to `support.nuri.com` on branch
