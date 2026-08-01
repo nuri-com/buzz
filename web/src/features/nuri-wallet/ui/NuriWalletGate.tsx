@@ -36,6 +36,7 @@ export function NuriWalletGate({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [connectReturned, setConnectReturned] = useState(false);
   const completing = useRef(false);
 
   const complete = useCallback(async () => {
@@ -92,14 +93,15 @@ export function NuriWalletGate({ children }: { children: ReactNode }) {
       "nuri_connect",
     );
     if (matchesConnectReturn(readPendingConnectFlow(), returnNonce)) {
-      void complete();
+      setConnectReturned(true);
     } else if (returnNonce) {
       setError("Connect return does not match this tab. Start again.");
     }
-  }, [complete]);
+  }, []);
 
   const start = async (flow: ConnectFlow) => {
     setBusy(true);
+    setConnectReturned(false);
     setError("");
     setStatus("Opening Nuri Connect…");
     try {
@@ -156,8 +158,10 @@ export function NuriWalletGate({ children }: { children: ReactNode }) {
             <KeyRound /> Use existing wallet
           </Button>
           {readPendingConnectFlow() && !busy ? (
-            <Button variant="ghost" onClick={() => void complete()}>
-              Continue pending Connect session
+            <Button variant="outline" onClick={() => void complete()}>
+              {connectReturned
+                ? "Use Passkey & Open Chat"
+                : "Continue pending Connect session"}
             </Button>
           ) : null}
         </div>
