@@ -235,9 +235,13 @@ export function ChatPage() {
     }
   };
 
+  // h-dvh, not min-h-dvh: the timeline is `flex-1 overflow-y-auto`, which only
+  // scrolls when an ancestor has a bounded height. Under a min-height the shell
+  // grew with the message list, so the window scrolled instead of the timeline
+  // and scrollIntoView jumped to the wrong place.
   return (
     <div
-      className="flex min-h-dvh flex-1 flex-col bg-background md:flex-row"
+      className="flex h-dvh min-h-0 flex-1 flex-col bg-background md:flex-row"
       data-testid="chat-shell"
     >
       <aside className="flex shrink-0 flex-col border-b bg-sidebar md:w-64 md:border-r md:border-b-0">
