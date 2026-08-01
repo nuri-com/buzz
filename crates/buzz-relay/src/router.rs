@@ -111,6 +111,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/api/invites/claim", post(api::invites::claim_invite))
         .route("/api/nuri/register", post(api::nuri::register))
+        // Space self-service: create, list, and join Spaces.
+        .route(
+            "/api/nuri/spaces",
+            get(api::spaces::list_spaces).post(api::spaces::create_space),
+        )
+        .route("/api/nuri/spaces/join", post(api::spaces::join_space))
         // Moderation queue reads (NIP-98 auth + mod-authz gate, L6)
         .route("/moderation/reports", get(api::bridge::moderation_reports))
         .route("/moderation/audit", get(api::bridge::moderation_audit))

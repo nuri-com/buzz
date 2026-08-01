@@ -96,6 +96,26 @@ export function selectAutoJoinChannel(
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+export function includeBootstrapGeneralChannel(
+  channels: ChatChannel[],
+  channelId: string | undefined,
+  isMember = false,
+): ChatChannel[] {
+  if (!channelId || channels.some((channel) => channel.id === channelId)) {
+    return channels;
+  }
+  return [
+    {
+      id: channelId,
+      name: "general",
+      type: "stream",
+      visibility: "open",
+      isMember,
+    },
+    ...channels,
+  ];
+}
+
 export function mergeChatMessages(
   current: NostrEvent[],
   incoming: NostrEvent[],

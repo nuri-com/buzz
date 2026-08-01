@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import {
+  ArrowLeft,
   FolderGit2,
   Hash,
   LoaderCircle,
@@ -83,7 +84,17 @@ function MessageRow({
   );
 }
 
-export function ChatPage() {
+export function ChatPage({
+  relayUrl,
+  spaceName,
+  bootstrapGeneralChannelId,
+  onBackToSpaces,
+}: {
+  relayUrl: string;
+  spaceName: string;
+  bootstrapGeneralChannelId?: string;
+  onBackToSpaces?: () => void;
+}) {
   const [catalog, setCatalog] = useState<ChatCatalog | null>(null);
   const [catalogError, setCatalogError] = useState("");
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -96,34 +107,43 @@ export function ChatPage() {
   const catalogRequest = useRef<Promise<ChatCatalog> | null>(null);
   const timelineEnd = useRef<HTMLDivElement>(null);
 
-  const refreshCatalog = useCallback(async (force = false) => {
-    setCatalogLoading(true);
-    setCatalogError("");
-    if (force || !catalogRequest.current) {
-      catalogRequest.current = loadChatCatalog();
-    }
-    try {
-      const loaded = await catalogRequest.current;
-      setCatalog(loaded);
-      setActiveChannelId((current) => {
-        if (loaded.channels.some((channel) => channel.id === current)) {
-          return current;
-        }
-        return (
-          loaded.channels.find((channel) => channel.isMember)?.id ??
-          loaded.channels[0]?.id ??
-          null
+  const refreshCatalog = useCallback(
+    async (force = false) => {
+      setCatalogLoading(true);
+      setCatalogError("");
+      if (force || !catalogRequest.current) {
+        catalogRequest.current = loadChatCatalog(
+          relayUrl,
+          bootstrapGeneralChannelId,
         );
-      });
-    } catch (error) {
-      setCatalogError(errorMessage(error));
-    } finally {
-      setCatalogLoading(false);
-    }
-  }, []);
+      }
+      try {
+        const loaded = await catalogRequest.current;
+        setCatalog(loaded);
+        setActiveChannelId((current) => {
+          if (loaded.channels.some((channel) => channel.id === current)) {
+            return current;
+          }
+          return (
+            loaded.channels.find((channel) => channel.isMember)?.id ??
+            loaded.channels[0]?.id ??
+            null
+          );
+        });
+      } catch (error) {
+        setCatalogError(errorMessage(error));
+      } finally {
+        setCatalogLoading(false);
+      }
+    },
+    [bootstrapGeneralChannelId, relayUrl],
+  );
 
   useEffect(() => {
-    void refreshCatalog();
+    catalogRequest.current = null;
+    setCatalog(null);
+    setActiveChannelId(null);
+    void refreshCatalog(true);
   }, [refreshCatalog]);
 
   const activeChannel = useMemo(
@@ -163,9 +183,10 @@ export function ChatPage() {
       (error) => {
         if (!cancelled) setConnectionError(error.message);
       },
+      relayUrl,
     );
 
-    void loadChatMessages(activeChannel.id)
+    void loadChatMessages(activeChannel.id, relayUrl)
       .then((events) => {
         if (cancelled) return;
         setTimeline((current) =>
@@ -192,7 +213,7 @@ export function ChatPage() {
       cancelled = true;
       closeSubscription();
     };
-  }, [activeChannel]);
+  }, [activeChannel, relayUrl]);
 
   const latestMessageId = timeline.events[timeline.events.length - 1]?.id;
   useEffect(() => {
@@ -206,7 +227,7 @@ export function ChatPage() {
     setJoiningChannelId(activeChannel.id);
     setCatalogError("");
     try {
-      await joinChatChannel(activeChannel.id);
+      await joinChatChannel(activeChannel.id, relayUrl);
       catalogRequest.current = null;
       await refreshCatalog(true);
       setActiveChannelId(activeChannel.id);
@@ -222,7 +243,7 @@ export function ChatPage() {
     setSending(true);
     setConnectionError("");
     try {
-      const sent = await sendChatMessage(activeChannel.id, draft);
+      const sent = await sendChatMessage(activeChannel.id, draft, relayUrl);
       setTimeline((current) => ({
         ...current,
         events: mergeChatMessages(current.events, [sent]),
@@ -246,11 +267,22 @@ export function ChatPage() {
     >
       <aside className="flex shrink-0 flex-col border-b bg-sidebar md:w-64 md:border-r md:border-b-0">
         <div className="flex h-16 items-center gap-3 border-b px-4">
-          <img alt="Buzz" className="h-9 w-9 rounded-lg" src={buzzAppIcon} />
+          {onBackToSpaces ? (
+            <Button
+              aria-label="Back to Spaces"
+              onClick={onBackToSpaces}
+              size="icon"
+              variant="ghost"
+            >
+              <ArrowLeft />
+            </Button>
+          ) : (
+            <img alt="Buzz" className="h-9 w-9 rounded-lg" src={buzzAppIcon} />
+          )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">Nuri Buzz</p>
+            <p className="truncate text-sm font-semibold">{spaceName}</p>
             <p className="truncate text-xs text-muted-foreground">
-              support.nuri.com
+              {new URL(relayUrl).host}
             </p>
           </div>
           <Button
@@ -265,7 +297,7 @@ export function ChatPage() {
 
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Channels
+            General
           </p>
           <Link
             className="text-muted-foreground hover:text-foreground"
